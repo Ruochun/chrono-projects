@@ -28,6 +28,10 @@ find_package(Chrono QUIET
              CONFIG
 )
 
+find_package(CUDAToolkit REQUIRED)
+find_package(ChPF REQUIRED)
+find_package(SGPS REQUIRED)
+
 # If Chrono and/or the required component(s) were not found, return now.
 
 if(NOT Chrono_FOUND)
@@ -78,6 +82,7 @@ FOREACH(PROGRAM ${TESTS})
     target_compile_options(${PROGRAM} PUBLIC ${CHRONO_CXX_FLAGS})
     target_link_options(${PROGRAM} PUBLIC ${CHRONO_LINKER_FLAGS})
     target_link_libraries(${PROGRAM} ${CHRONO_LIBRARIES})
+    target_link_libraries(${PROGRAM}  SGPS::sbel_gpu_physics)
 
 ENDFOREACH()
 

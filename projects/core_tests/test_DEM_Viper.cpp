@@ -26,6 +26,8 @@
 
 #include "chrono_thirdparty/filesystem/path.h"
 
+#include <DEM/API.h>
+
 using namespace chrono;
 using namespace chrono::geometry;
 using namespace chrono::viper;
