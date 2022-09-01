@@ -14,6 +14,7 @@ set(TESTS
     test_CH_function_recorder
     test_CH_integratorHHT
     test_CH_vector
+    test_DEM_Viper
 )
 
 #--------------------------------------------------------------
