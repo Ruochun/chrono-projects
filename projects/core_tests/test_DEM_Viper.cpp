@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
 
-    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.15), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.14), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -193,12 +193,16 @@ int main(int argc, char* argv[]) {
     float wheel_width = 0.25;
     wheel_mass *= kg_g_conv;  // in kg or g
     // Our shelf wheel geometry is lying flat on ground with z being the axial direction
-    float wheel_IZZ = wheel_mass * wheel_rad * wheel_rad / 2;
+    float wheel_IYY = wheel_mass * wheel_rad * wheel_rad / 2;
     float wheel_IXX = (wheel_mass / 12) * (3 * wheel_rad * wheel_rad + wheel_width * wheel_width);
-    float3 wheel_MOI = make_float3(wheel_IXX, wheel_IXX, wheel_IZZ);
+    float3 wheel_MOI = make_float3(wheel_IXX, wheel_IYY, wheel_IXX);
     auto wheel_template = DEM_sim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
     // The file contains no wheel particles size info, so let's manually set them
     wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01);
+    // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
+    // along X direction. Let's make it clear its principal axes is not what we used to report its component 
+    // sphere relative positions.
+    wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0.7071, 0, 0));
 
     // Then the ground particle template
     DEMClumpTemplate shape_template;
@@ -273,11 +277,12 @@ int main(int argc, char* argv[]) {
     std::cout << "Making wheels..." << std::endl;
     DEM_sim.SetFamilyFixed(100);
     std::vector<std::shared_ptr<DEMTracker>> trackers;
+    std::vector<std::shared_ptr<DEMClumpBatch>> DEM_Wheels;
     for (int i = 0; i < nW; i++) {
-        auto DEM_Wheel = DEM_sim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z()));
-        DEM_Wheel->SetOriQ(make_float4(0.7071, 0.7071, 0, 0));
-        DEM_Wheel->SetFamily(100);
-        trackers.push_back(DEM_sim.Track(DEM_Wheel));
+        DEM_Wheels.push_back(DEM_sim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
+        // DEM_Wheel->SetOriQ(make_float4(0.7071, 0.7071, 0, 0));
+        DEM_Wheels[i]->SetFamily(100);
+        trackers.push_back(DEM_sim.Track(DEM_Wheels[i]));
     }
 
     //////
@@ -286,18 +291,22 @@ int main(int argc, char* argv[]) {
     std::cout << "Begin initialization" << std::endl;
     auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
 
-    float step_size = 1e-6;
+    float base_step_size = 1e-6;
+    float base_vel = 0.4;
     DEM_sim.SetCoordSysOrigin("center");
-    DEM_sim.SetInitTimeStep(step_size);
-    DEM_sim.SetGravitationalAcceleration(make_float3(0, 0, -9.81));
+    DEM_sim.SetInitTimeStep(base_step_size);
+    DEM_sim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
     DEM_sim.SetCDUpdateFreq(10);
     // DEM_sim.SetExpandFactor(1e-3);
-    DEM_sim.SetMaxVelocity(3.);
+    DEM_sim.SetMaxVelocity(5.0);
     DEM_sim.SetExpandSafetyParam(1.1);
     DEM_sim.SetInitBinSize(scales.at(2));
     
     DEM_sim.Initialize();
+    for (const auto& tracker : trackers) {
+        std::cout << "A tracker is tracking owner " << tracker->obj->ownerID << std::endl;
+    }
     std::cout << "End initialization" << std::endl;
 
     ///////////////////////////////////////////
@@ -306,7 +315,11 @@ int main(int argc, char* argv[]) {
 
     float time_end = 2.0;
     unsigned int fps = 40;
-    unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
+    unsigned int report_freq = 1000;
+    unsigned int param_update_freq = 10000;
+    unsigned int out_steps = (unsigned int)(1.0 / (fps * base_step_size));
+    unsigned int report_steps = (unsigned int)(1.0 / (report_freq * base_step_size));
+    unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * base_step_size));
 
     path out_dir = current_path();
     out_dir += "/Viper_on_GRC";
@@ -315,18 +328,27 @@ int main(int argc, char* argv[]) {
     unsigned int curr_step = 0;
 
     std::vector<ChQuaternion<>> wheel_rot(4);
+    float max_v;
+    float step_size = base_step_size;
     for (float t = 0; t < time_end; t += step_size, curr_step++) {
         for (int i = 0; i < nW; i++) {
             wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
             trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
             wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
             trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
+            
+            if (curr_step % report_steps == 0) {
+                
+                std::cout << "Wheel " << i << " position: " << wheel_pos[i].x() << ", " 
+                      << wheel_pos[i].y() << ", " << wheel_pos[i].z() << std::endl;
+                
+                std::cout << "Wheel " << i << " rotation: " << wheel_rot[i].e0() << ", " 
+                      << wheel_rot[i].e1() << ", " << wheel_rot[i].e2() << ", " << wheel_rot[i].e3() << std::endl;
+            }
         }
 
         if (curr_step % out_steps == 0) {
             std::cout << "Frame: " << currframe << std::endl;
-            float max_v = max_v_finder->GetValue();
-            std::cout << "Max vel in simulation is " << max_v << std::endl;
             DEM_sim.ShowThreadCollaborationStats();
             char filename[200];
             sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe++);
@@ -339,16 +361,34 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < nW; i++) {
             float3 F = trackers[i]->ContactAcc();
             F *= wheel_mass;
-            float3 tor = trackers[i]->ContactAngAcc();
+            float3 tor = trackers[i]->ContactAngAccLocal();
             tor = wheel_MOI * tor;
             Wheels[i]->Empty_forces_accumulators();
             Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
-            Wheels[i]->Accumulate_torque(Float2ChVec(tor), false);
+            Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SGPS is local
         }
         sys.DoStepDynamics(step_size);
         viper.Update();
         t += step_size;
 
+        if (curr_step % param_update_steps == 0 && t < 0.2) {
+        // if (t < 0.25) {
+            DEM_sim.DoDynamicsThenSync(0);
+            max_v = max_v_finder->GetValue();
+            float multiplier = max_v / base_vel;
+            step_size = base_step_size / multiplier;
+            DEM_sim.SetInitTimeStep(step_size);
+            // DEM_sim.SetMaxVelocity(max_v * 1.2);
+            DEM_sim.UpdateSimParams();
+            std::cout << "Max vel in simulation is " << max_v << std::endl;
+            std::cout << "Step size in simulation is " << step_size << std::endl;
+        }
+
+        if (curr_step % report_steps == 0) {
+            float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());
+            std::cout << "Rover body is at " << body_pos.x << ", " << body_pos.y << ", " << body_pos.z << std::endl;
+            std::cout << "========================" << std::endl;
+        }
     }
 
     return 0;
