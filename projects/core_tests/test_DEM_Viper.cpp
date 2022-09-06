@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
 
-    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.14), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.16), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -291,10 +291,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Begin initialization" << std::endl;
     auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
 
-    float base_step_size = 1e-6;
+    float base_step_size = 5e-7;
+    float step_size = base_step_size;
     float base_vel = 0.4;
     DEM_sim.SetCoordSysOrigin("center");
-    DEM_sim.SetInitTimeStep(base_step_size);
+    DEM_sim.SetInitTimeStep(step_size);
     DEM_sim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
     DEM_sim.SetCDUpdateFreq(10);
@@ -315,11 +316,12 @@ int main(int argc, char* argv[]) {
 
     float time_end = 2.0;
     unsigned int fps = 40;
-    unsigned int report_freq = 1000;
+    unsigned int report_freq = 10000;
     unsigned int param_update_freq = 10000;
-    unsigned int out_steps = (unsigned int)(1.0 / (fps * base_step_size));
-    unsigned int report_steps = (unsigned int)(1.0 / (report_freq * base_step_size));
-    unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * base_step_size));
+    // unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
+    float frame_accu_thres = 1.0 / fps;
+    unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));
+    unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * step_size));
 
     path out_dir = current_path();
     out_dir += "/Viper_on_GRC";
@@ -329,7 +331,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<ChQuaternion<>> wheel_rot(4);
     float max_v;
-    float step_size = base_step_size;
+    int change_step = 0;
+    float frame_accu = frame_accu_thres;
     for (float t = 0; t < time_end; t += step_size, curr_step++) {
         for (int i = 0; i < nW; i++) {
             wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
@@ -347,7 +350,9 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (curr_step % out_steps == 0) {
+        // if (curr_step % out_steps == 0) {
+        if (frame_accu >= frame_accu_thres) {
+            frame_accu = 0.;
             std::cout << "Frame: " << currframe << std::endl;
             DEM_sim.ShowThreadCollaborationStats();
             char filename[200];
@@ -370,23 +375,47 @@ int main(int argc, char* argv[]) {
         sys.DoStepDynamics(step_size);
         viper.Update();
         t += step_size;
+        frame_accu += step_size;
 
-        if (curr_step % param_update_steps == 0 && t < 0.2) {
-        // if (t < 0.25) {
+        // if (curr_step % param_update_steps == 0 && t < 0.2) {
+        // // if (t < 0.25) {
+        //     DEM_sim.DoDynamicsThenSync(0);
+        //     max_v = max_v_finder->GetValue();
+        //     float multiplier = max_v / base_vel;
+        //     step_size = base_step_size / multiplier;
+        //     DEM_sim.SetInitTimeStep(step_size);
+        //     // DEM_sim.SetMaxVelocity(max_v * 1.2);
+        //     DEM_sim.UpdateSimParams();
+        //     std::cout << "Max vel in simulation is " << max_v << std::endl;
+        //     std::cout << "Step size in simulation is " << step_size << std::endl;
+        // }
+        if (t > 0.2 && change_step == 0) {
             DEM_sim.DoDynamicsThenSync(0);
-            max_v = max_v_finder->GetValue();
-            float multiplier = max_v / base_vel;
-            step_size = base_step_size / multiplier;
+            step_size = 1e-6;
             DEM_sim.SetInitTimeStep(step_size);
-            // DEM_sim.SetMaxVelocity(max_v * 1.2);
             DEM_sim.UpdateSimParams();
-            std::cout << "Max vel in simulation is " << max_v << std::endl;
-            std::cout << "Step size in simulation is " << step_size << std::endl;
+            change_step = 1;
+        } else if (t > 0.3 && change_step == 1) {
+            DEM_sim.DoDynamicsThenSync(0);
+            step_size = 2e-6;
+            DEM_sim.SetInitTimeStep(step_size);
+            DEM_sim.UpdateSimParams();
+            change_step = 2;
+        } else if (t > 0.4 && change_step == 2) {
+            DEM_sim.DoDynamicsThenSync(0);
+            step_size = 5e-6;
+            DEM_sim.SetInitTimeStep(step_size);
+            DEM_sim.UpdateSimParams();
+            change_step = 3;
         }
+
 
         if (curr_step % report_steps == 0) {
             float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());
             std::cout << "Rover body is at " << body_pos.x << ", " << body_pos.y << ", " << body_pos.z << std::endl;
+            std::cout << "Time is " << t << std::endl;
+            max_v = max_v_finder->GetValue();
+            std::cout << "Max vel in simulation is " << max_v << std::endl;
             std::cout << "========================" << std::endl;
         }
     }
