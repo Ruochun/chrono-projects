@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
 
-    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.16), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.12), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -205,69 +205,15 @@ int main(int argc, char* argv[]) {
     wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0.7071, 0, 0));
 
     // Then the ground particle template
-    DEMClumpTemplate shape_template;
-    shape_template.ReadComponentFromFile("../data/clumps/triangular_flat.csv");
-    // Calculate its mass and MOI
-    float mass = 2.6e3 * 5.5886717 * kg_g_conv;  // in kg or g
-    float3 MOI = make_float3(1.8327927, 2.1580013, 0.77010059) * 2.6e3 * kg_g_conv;
-    // Scale the template we just created
-    std::vector<std::shared_ptr<DEMClumpTemplate>> ground_particle_templates;
-    std::vector<double> scales = {0.0014, 0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
-    std::for_each(scales.begin(), scales.end(), [](double& r) { r *= 10.; });
-    for (double scaling : scales) {
-        auto this_template = shape_template;
-        this_template.mass = (double)mass * scaling * scaling * scaling;
-        this_template.MOI.x = (double)MOI.x * (double)(scaling * scaling * scaling * scaling * scaling);
-        this_template.MOI.y = (double)MOI.y * (double)(scaling * scaling * scaling * scaling * scaling);
-        this_template.MOI.z = (double)MOI.z * (double)(scaling * scaling * scaling * scaling * scaling);
-        std::cout << "Mass: " << this_template.mass << std::endl;
-        std::cout << "MOIX: " << this_template.MOI.x << std::endl;
-        std::cout << "MOIY: " << this_template.MOI.y << std::endl;
-        std::cout << "MOIZ: " << this_template.MOI.z << std::endl;
-        std::cout << "=====================" << std::endl;
-        std::for_each(this_template.radii.begin(), this_template.radii.end(), [scaling](float& r) { r *= scaling; });
-        std::for_each(this_template.relPos.begin(), this_template.relPos.end(), [scaling](float3& r) { r *= scaling; });
-        this_template.materials = std::vector<std::shared_ptr<DEMMaterial>>(this_template.nComp, mat_type_terrain);
-        ground_particle_templates.push_back(DEM_sim.LoadClumpType(this_template));
-    }
+    float sp_rad = 0.0025;
+    auto ground_particle_template = DEM_sim.LoadClumpSimpleSphere(4./3.*3.14*std::pow(sp_rad,3)*2.6e3,sp_rad,mat_type_terrain);
 
     // Now we load part1 clump locations from a output file
     std::cout << "Making terrain..." << std::endl;
-    auto part1_clump_xyz = DEM_sim.ReadClumpXyzFromCsv("GRC_10e6.csv");
-    auto part1_clump_quaternion = DEM_sim.ReadClumpQuatFromCsv("GRC_10e6.csv");
-    std::vector<float3> in_xyz;
-    std::vector<float4> in_quat;
-    std::vector<std::shared_ptr<DEMClumpTemplate>> in_types;
-    unsigned int t_num = 0;
-    for (int i = 0; i < scales.size(); i++) {
-        // Our template names are 0001, 0002 etc.
-        t_num++;
-        char t_name[20];
-        sprintf(t_name, "%04d", t_num);
+    auto in_xyz = DEMBoxHCPSampler(make_float3(0,0,-0.45), make_float3(world_y_size -2*sp_rad, world_y_size/2-sp_rad, 0.05-sp_rad),
+                                      2.01 * sp_rad);
 
-        auto this_type_xyz = part1_clump_xyz[std::string(t_name)];
-        auto this_type_quat = part1_clump_quaternion[std::string(t_name)];
-
-        size_t n_clump_this_type = this_type_xyz.size();
-        std::cout << "Loading clump " << std::string(t_name) << " which has particle num: " << n_clump_this_type << std::endl;
-        // Prepare clump type identification vector for loading into the system (don't forget type 0 in
-        // ground_particle_templates is the template for rover wheel)
-        std::vector<std::shared_ptr<DEMClumpTemplate>> this_type(n_clump_this_type,
-                                                                 ground_particle_templates.at(t_num - 1));
-
-        // Add them to the big long vector
-        in_xyz.insert(in_xyz.end(), this_type_xyz.begin(), this_type_xyz.end());
-        in_quat.insert(in_quat.end(), this_type_quat.begin(), this_type_quat.end());
-        in_types.insert(in_types.end(), this_type.begin(), this_type.end());
-        std::cout << "Added clump type " << t_num << std::endl;
-    }
-    // Finally, load the info into this batch
-    DEMClumpBatch base_batch(in_xyz.size());
-    base_batch.SetTypes(in_types);
-    base_batch.SetPos(in_xyz);
-    base_batch.SetOriQ(in_quat);
-
-    DEM_sim.AddClumps(base_batch);
+    DEM_sim.AddClumps(std::vector<std::shared_ptr<DEMClumpTemplate>>(in_xyz.size(),ground_particle_template), in_xyz);
 
     /////////
     // Add wheel in DEM
@@ -291,7 +237,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Begin initialization" << std::endl;
     auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
 
-    float base_step_size = 5e-7;
+    float base_step_size = 5e-6;
     float step_size = base_step_size;
     float base_vel = 0.4;
     DEM_sim.SetCoordSysOrigin("center");
@@ -302,7 +248,7 @@ int main(int argc, char* argv[]) {
     // DEM_sim.SetExpandFactor(1e-3);
     DEM_sim.SetMaxVelocity(5.0);
     DEM_sim.SetExpandSafetyParam(1.1);
-    DEM_sim.SetInitBinSize(scales.at(2));
+    DEM_sim.SetInitBinSize(sp_rad*4);
     
     DEM_sim.Initialize();
     for (const auto& tracker : trackers) {
@@ -314,7 +260,7 @@ int main(int argc, char* argv[]) {
     // Real simulation
     ///////////////////////////////////////////
 
-    float time_end = 2.0;
+    float time_end = 8.0;
     unsigned int fps = 40;
     unsigned int report_freq = 10000;
     unsigned int param_update_freq = 10000;
@@ -324,7 +270,7 @@ int main(int argc, char* argv[]) {
     unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * step_size));
 
     path out_dir = current_path();
-    out_dir += "/Viper_on_GRC";
+    out_dir += "/Viper_on_GRC_simple";
     create_directory(out_dir);
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
@@ -377,39 +323,6 @@ int main(int argc, char* argv[]) {
         viper.Update();
         t += step_size;
         frame_accu += step_size;
-
-        // if (curr_step % param_update_steps == 0 && t < 0.2) {
-        // // if (t < 0.25) {
-        //     DEM_sim.DoDynamicsThenSync(0);
-        //     max_v = max_v_finder->GetValue();
-        //     float multiplier = max_v / base_vel;
-        //     step_size = base_step_size / multiplier;
-        //     DEM_sim.SetInitTimeStep(step_size);
-        //     // DEM_sim.SetMaxVelocity(max_v * 1.2);
-        //     DEM_sim.UpdateSimParams();
-        //     std::cout << "Max vel in simulation is " << max_v << std::endl;
-        //     std::cout << "Step size in simulation is " << step_size << std::endl;
-        // }
-        if (t > 0.2 && change_step == 0) {
-            DEM_sim.DoDynamicsThenSync(0);
-            step_size = 1e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.UpdateSimParams();
-            change_step = 1;
-        } else if (t > 0.3 && change_step == 1) {
-            DEM_sim.DoDynamicsThenSync(0);
-            step_size = 2e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.UpdateSimParams();
-            change_step = 2;
-        } else if (t > 0.4 && change_step == 2) {
-            DEM_sim.DoDynamicsThenSync(0);
-            step_size = 5e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.UpdateSimParams();
-            change_step = 3;
-        }
-
 
         if (curr_step % report_steps == 0) {
             float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());

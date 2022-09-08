@@ -15,6 +15,7 @@ set(TESTS
     test_CH_integratorHHT
     test_CH_vector
     test_DEM_Viper
+    test_DEM_Viper_Simple
 )
 
 #--------------------------------------------------------------
