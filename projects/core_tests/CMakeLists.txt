@@ -31,7 +31,7 @@ find_package(Chrono QUIET
 
 find_package(CUDAToolkit REQUIRED)
 find_package(ChPF REQUIRED)
-find_package(SGPS REQUIRED)
+find_package(SMUG REQUIRED)
 
 # If Chrono and/or the required component(s) were not found, return now.
 
@@ -83,7 +83,7 @@ FOREACH(PROGRAM ${TESTS})
     target_compile_options(${PROGRAM} PUBLIC ${CHRONO_CXX_FLAGS})
     target_link_options(${PROGRAM} PUBLIC ${CHRONO_LINKER_FLAGS})
     target_link_libraries(${PROGRAM} ${CHRONO_LIBRARIES})
-    target_link_libraries(${PROGRAM}  SGPS::sbel_gpu_physics)
+    target_link_libraries(${PROGRAM}  SMUG::simulator_multi_gpu)
 
 ENDFOREACH()
 

@@ -12,7 +12,7 @@
 // Authors: RZ
 // =============================================================================
 //
-// Demo to show Viper Rover operated on SCM Terrain
+// Demo to show Viper Rover operated on DEM Terrain
 //
 // =============================================================================
 
@@ -27,8 +27,8 @@
 #include "chrono_thirdparty/filesystem/path.h"
 
 #include <DEM/API.h>
-#include <core/ApiVersion.h>
-#include <core/utils/ThreadManager.h>
+//#include <core/ApiVersion.h>
+//#include <core/utils/ThreadManager.h>
 #include <DEM/HostSideHelpers.hpp>
 #include <DEM/utils/Samplers.hpp>
 
@@ -39,7 +39,7 @@
 #include <random>
 #include <cmath>
 
-using namespace sgps;
+using namespace smug;
 using namespace std::filesystem;
 
 using namespace chrono;
@@ -161,7 +161,7 @@ int main(int argc, char* argv[]) {
     }
 
     //////////////////////////////////////////////
-    // Now step up SGPS
+    // Now step up SMUG
     //////////////////////////////////////////////
 
     DEMSolver DEM_sim;
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
             tor = wheel_MOI * tor;
             Wheels[i]->Empty_forces_accumulators();
             Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
-            Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SGPS is local
+            Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SMUG is local
         }
         sys.DoStepDynamics(step_size);
         viper.Update();
