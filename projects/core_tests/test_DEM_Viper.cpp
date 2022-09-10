@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
     // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
     // along X direction. Let's make it clear its principal axes is not what we used to report its component 
     // sphere relative positions.
-    wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0.7071, 0, 0));
+    wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0, 0, 0.7071));
 
     // Then the ground particle template
     DEMClumpTemplate shape_template;
@@ -300,7 +300,7 @@ int main(int argc, char* argv[]) {
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
     DEM_sim.SetCDUpdateFreq(10);
     // DEM_sim.SetExpandFactor(1e-3);
-    DEM_sim.SetMaxVelocity(5.0);
+    DEM_sim.SetMaxVelocity(15.0);
     DEM_sim.SetExpandSafetyParam(1.1);
     DEM_sim.SetInitBinSize(scales.at(2));
     
@@ -315,9 +315,9 @@ int main(int argc, char* argv[]) {
     ///////////////////////////////////////////
 
     float time_end = 2.0;
-    unsigned int fps = 40;
-    unsigned int report_freq = 10000;
-    unsigned int param_update_freq = 10000;
+    unsigned int fps = 20;
+    unsigned int report_freq = 50000;
+    unsigned int param_update_freq = 50000;
     // unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
     float frame_accu_thres = 1.0 / fps;
     unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));

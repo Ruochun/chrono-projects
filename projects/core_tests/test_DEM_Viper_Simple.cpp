@@ -142,6 +142,12 @@ int main(int argc, char* argv[]) {
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
 
+    // Viper does not roll that fast, no? Default is Pi/s, ridiculous
+    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LF);
+    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RF);
+    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LB);
+    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RB);
+    
     viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.12), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
@@ -202,10 +208,11 @@ int main(int argc, char* argv[]) {
     // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
     // along X direction. Let's make it clear its principal axes is not what we used to report its component 
     // sphere relative positions.
-    wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0.7071, 0, 0));
+    wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0, 0, 0.7071));
 
     // Then the ground particle template
-    float sp_rad = 0.0025;
+    float sp_rad = 0.005;
+    // float sp_rad = 0.0025; // This one is fine too, with 5e-6 step size
     auto ground_particle_template = DEM_sim.LoadClumpSimpleSphere(4./3.*3.14*std::pow(sp_rad,3)*2.6e3,sp_rad,mat_type_terrain);
 
     // Now we load part1 clump locations from a output file
@@ -246,7 +253,7 @@ int main(int argc, char* argv[]) {
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
     DEM_sim.SetCDUpdateFreq(10);
     // DEM_sim.SetExpandFactor(1e-3);
-    DEM_sim.SetMaxVelocity(5.0);
+    DEM_sim.SetMaxVelocity(15.0);
     DEM_sim.SetExpandSafetyParam(1.1);
     DEM_sim.SetInitBinSize(sp_rad*4);
     
@@ -261,16 +268,16 @@ int main(int argc, char* argv[]) {
     ///////////////////////////////////////////
 
     float time_end = 8.0;
-    unsigned int fps = 40;
-    unsigned int report_freq = 10000;
-    unsigned int param_update_freq = 10000;
+    unsigned int fps = 20;
+    unsigned int report_freq = 50000;
+    unsigned int param_update_freq = 50000;
     // unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
     float frame_accu_thres = 1.0 / fps;
     unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));
     unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * step_size));
 
     path out_dir = current_path();
-    out_dir += "/Viper_on_GRC_simple";
+    out_dir += "/Viper_on_GRC_flat";
     create_directory(out_dir);
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
@@ -304,7 +311,6 @@ int main(int argc, char* argv[]) {
             char filename[200];
             sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe++);
             DEM_sim.WriteSphereFile(std::string(filename));
-            DEM_sim.ShowThreadCollaborationStats();
         }
         // Run DEM first
         DEM_sim.DoDynamics(step_size);
