@@ -76,7 +76,12 @@ inline ChVector<> Float2ChVec(float3 f3) {
 }
 
 inline float4 ChQ2Float(const ChQuaternion<>& Q) {
-    return make_float4(Q.e0(), Q.e1(), Q.e2(), Q.e3());
+    float4 f4;
+    f4.w = Q.e0();
+    f4.x = Q.e1();
+    f4.y = Q.e2();
+    f4.z = Q.e3();
+    return f4;
 }
 
 // Return customized wheel material parameters
