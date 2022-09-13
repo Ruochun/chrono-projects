@@ -31,7 +31,7 @@ find_package(Chrono QUIET
 
 find_package(CUDAToolkit REQUIRED)
 find_package(ChPF REQUIRED)
-find_package(SMUG REQUIRED)
+find_package(DEME REQUIRED)
 
 # If Chrono and/or the required component(s) were not found, return now.
 
@@ -83,7 +83,7 @@ FOREACH(PROGRAM ${TESTS})
     target_compile_options(${PROGRAM} PUBLIC ${CHRONO_CXX_FLAGS})
     target_link_options(${PROGRAM} PUBLIC ${CHRONO_LINKER_FLAGS})
     target_link_libraries(${PROGRAM} ${CHRONO_LIBRARIES})
-    target_link_libraries(${PROGRAM}  SMUG::simulator_multi_gpu)
+    target_link_libraries(${PROGRAM}  DEME::simulator_multi_gpu)
 
 ENDFOREACH()
 

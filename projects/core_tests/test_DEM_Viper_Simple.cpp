@@ -39,7 +39,7 @@
 #include <random>
 #include <cmath>
 
-using namespace smug;
+using namespace deme;
 using namespace std::filesystem;
 
 using namespace chrono;
@@ -139,19 +139,24 @@ int main(int argc, char* argv[]) {
     const int nW = 4; // 4 wheels
 
     // Create the rover
-    auto driver = chrono_types::make_shared<ViperDCMotorControl>();
+    // auto driver = chrono_types::make_shared<ViperDCMotorControl>();
+    auto driver = chrono_types::make_shared<ViperSpeedDriver>(0, 3.14159/2);
 
     Viper viper(&sys, wheel_type);
 
+    // Viper does not roll that fast, no? Default is Pi/s, ridiculous
     viper.SetDriver(driver);
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
-
-    // Viper does not roll that fast, no? Default is Pi/s, ridiculous
-    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LF);
-    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RF);
-    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LB);
-    driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RB);
+    
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LF);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RF);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LB);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RB);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LF);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RF);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
     viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.12), QUNIT));
 
@@ -177,9 +182,9 @@ int main(int argc, char* argv[]) {
 
     DEMSolver DEM_sim;
     DEM_sim.SetVerbosity(INFO);
-    DEM_sim.SetOutputFormat(DEM_OUTPUT_FORMAT::CSV);
-    // DEM_sim.SetOutputContent(DEM_OUTPUT_CONTENT::FAMILY);
-    DEM_sim.SetOutputContent(DEM_OUTPUT_CONTENT::XYZ);
+    DEM_sim.SetOutputFormat(OUTPUT_FORMAT::CSV);
+    // DEM_sim.SetOutputContent(OUTPUT_CONTENT::FAMILY);
+    DEM_sim.SetOutputContent(OUTPUT_CONTENT::XYZ);
 
     srand(759);
 
@@ -218,7 +223,8 @@ int main(int argc, char* argv[]) {
     // Then the ground particle template
     float sp_rad = 0.005;
     // float sp_rad = 0.0025; // This one is fine too, with 5e-6 step size
-    auto ground_particle_template = DEM_sim.LoadClumpSimpleSphere(4./3.*3.14*std::pow(sp_rad,3)*2.6e3,sp_rad,mat_type_terrain);
+    auto ground_particle_template = DEM_sim.LoadSphereType(4./3.*3.14*std::pow(sp_rad,3)*2.6e3,sp_rad,mat_type_terrain);
+    ground_particle_template->SetVolume(4./3.*3.14*std::pow(sp_rad,3));
 
     // Now we load part1 clump locations from a output file
     std::cout << "Making terrain..." << std::endl;
@@ -246,10 +252,13 @@ int main(int argc, char* argv[]) {
     //////
     // Make ready for DEM simulation
     ///////
-    std::cout << "Begin initialization" << std::endl;
     auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
+    auto max_z_finder = DEM_sim.CreateInspector("clump_max_z");
+    auto void_ratio_finder =
+        DEM_sim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
+    float total_volume = 0.96 * 0.96 * 0.05;
 
-    float base_step_size = 5e-6;
+    float base_step_size = 2e-5;
     float step_size = base_step_size;
     float base_vel = 0.4;
     DEM_sim.SetCoordSysOrigin("center");
@@ -260,13 +269,13 @@ int main(int argc, char* argv[]) {
     // DEM_sim.SetExpandFactor(1e-3);
     DEM_sim.SetMaxVelocity(15.0);
     DEM_sim.SetExpandSafetyParam(1.1);
-    DEM_sim.SetInitBinSize(sp_rad*4);
+    DEM_sim.SetInitBinSize(sp_rad*6);
+    DEM_sim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
     
     DEM_sim.Initialize();
     for (const auto& tracker : trackers) {
         std::cout << "A tracker is tracking owner " << tracker->obj->ownerID << std::endl;
     }
-    std::cout << "End initialization" << std::endl;
 
     ///////////////////////////////////////////
     // Real simulation
@@ -286,6 +295,21 @@ int main(int argc, char* argv[]) {
     create_directory(out_dir);
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
+
+    {
+        // Figure out the exact size of wheels
+        float max_z = max_z_finder->GetValue();
+        float wheel_center_z = ChVec2Float(Wheels[0]->GetFrame_REF_to_abs().GetPos()).z;
+        std::cout << "Exact wheel radius is " << max_z-wheel_center_z << std::endl;
+    }
+    
+
+    // Timers 
+    std::chrono::high_resolution_clock::time_point h_start, d_start;
+    std::chrono::high_resolution_clock::time_point h_end, d_end;
+    std::chrono::duration<double> h_total, d_total;
+    h_total = std::chrono::duration<double>(0);
+    d_total = std::chrono::duration<double>(0);
 
     std::vector<ChQuaternion<>> wheel_rot(4);
     float max_v;
@@ -318,7 +342,10 @@ int main(int argc, char* argv[]) {
             DEM_sim.WriteSphereFile(std::string(filename));
         }
         // Run DEM first
+        d_start = std::chrono::high_resolution_clock::now();
         DEM_sim.DoDynamics(step_size);
+        d_end = std::chrono::high_resolution_clock::now();
+        d_total += d_end - d_start;
 
         // Then feed force
         for (int i = 0; i < nW; i++) {
@@ -330,8 +357,12 @@ int main(int argc, char* argv[]) {
             Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
             Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SMUG is local
         }
+        h_start = std::chrono::high_resolution_clock::now();
         sys.DoStepDynamics(step_size);
         viper.Update();
+        h_end = std::chrono::high_resolution_clock::now();
+        h_total += h_end - h_start;
+
         t += step_size;
         frame_accu += step_size;
 
@@ -341,9 +372,13 @@ int main(int argc, char* argv[]) {
             std::cout << "Time is " << t << std::endl;
             max_v = max_v_finder->GetValue();
             std::cout << "Max vel in simulation is " << max_v << std::endl;
+            float matter_volume = void_ratio_finder->GetValue();
+            std::cout << "Void ratio now: " << (total_volume - matter_volume) / matter_volume << std::endl;
             std::cout << "========================" << std::endl;
         }
     }
+    std::cout << h_total.count() << " seconds spent on host"  << std::endl;
+    std::cout << d_total.count() << " seconds spent on device"  << std::endl;
 
     DEM_sim.ShowThreadCollaborationStats();
     DEM_sim.ShowTimingStats();

@@ -39,7 +39,7 @@
 #include <random>
 #include <cmath>
 
-using namespace smug;
+using namespace deme;
 using namespace std::filesystem;
 
 using namespace chrono;
@@ -139,14 +139,25 @@ int main(int argc, char* argv[]) {
     const int nW = 4; // 4 wheels
 
     // Create the rover
-    auto driver = chrono_types::make_shared<ViperDCMotorControl>();
+    // auto driver = chrono_types::make_shared<ViperDCMotorControl>();
+    auto driver = chrono_types::make_shared<ViperSpeedDriver>(0, 3.14159/2);
 
     Viper viper(&sys, wheel_type);
 
+    // Viper does not roll that fast, no? Default is Pi/s, ridiculous
     viper.SetDriver(driver);
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
-
+    
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LF);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RF);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LB);
+    // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RB);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LF);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RF);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
+    // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
+    
     viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.16), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
@@ -171,9 +182,9 @@ int main(int argc, char* argv[]) {
 
     DEMSolver DEM_sim;
     DEM_sim.SetVerbosity(INFO);
-    DEM_sim.SetOutputFormat(DEM_OUTPUT_FORMAT::CSV);
-    // DEM_sim.SetOutputContent(DEM_OUTPUT_CONTENT::FAMILY);
-    DEM_sim.SetOutputContent(DEM_OUTPUT_CONTENT::XYZ);
+    DEM_sim.SetOutputFormat(OUTPUT_FORMAT::CSV);
+    // DEM_sim.SetOutputContent(OUTPUT_CONTENT::FAMILY);
+    DEM_sim.SetOutputContent(OUTPUT_CONTENT::XYZ);
 
     srand(759);
 
@@ -293,8 +304,11 @@ int main(int argc, char* argv[]) {
     //////
     // Make ready for DEM simulation
     ///////
-    std::cout << "Begin initialization" << std::endl;
     auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
+    // auto max_z_finder = DEM_sim.CreateInspector("clump_max_z");
+    // auto void_ratio_finder =
+    //     DEM_sim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
+    // float total_volume = 0.96 * 0.96 * 0.05;
 
     float base_step_size = 5e-7;
     float step_size = base_step_size;
@@ -308,6 +322,7 @@ int main(int argc, char* argv[]) {
     DEM_sim.SetMaxVelocity(15.0);
     DEM_sim.SetExpandSafetyParam(1.1);
     DEM_sim.SetInitBinSize(scales.at(2));
+    DEM_sim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
     
     DEM_sim.Initialize();
     for (const auto& tracker : trackers) {
@@ -320,7 +335,7 @@ int main(int argc, char* argv[]) {
     ///////////////////////////////////////////
 
     float time_end = 2.0;
-    unsigned int fps = 20;
+    unsigned int fps = 60;
     unsigned int report_freq = 50000;
     unsigned int param_update_freq = 50000;
     // unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
@@ -395,6 +410,7 @@ int main(int argc, char* argv[]) {
         //     std::cout << "Max vel in simulation is " << max_v << std::endl;
         //     std::cout << "Step size in simulation is " << step_size << std::endl;
         // }
+
         if (t > 0.2 && change_step == 0) {
             DEM_sim.DoDynamicsThenSync(0);
             step_size = 1e-6;
@@ -414,7 +430,6 @@ int main(int argc, char* argv[]) {
             DEM_sim.UpdateSimParams();
             change_step = 3;
         }
-
 
         if (curr_step % report_steps == 0) {
             float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());
