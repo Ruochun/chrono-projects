@@ -180,30 +180,30 @@ int main(int argc, char* argv[]) {
     // Now step up SMUG
     //////////////////////////////////////////////
 
-    DEMSolver DEM_sim;
-    DEM_sim.SetVerbosity(INFO);
-    DEM_sim.SetOutputFormat(OUTPUT_FORMAT::CSV);
-    // DEM_sim.SetOutputContent(OUTPUT_CONTENT::FAMILY);
-    DEM_sim.SetOutputContent(OUTPUT_CONTENT::XYZ);
+    DEMSolver DEMSim;
+    DEMSim.SetVerbosity(INFO);
+    DEMSim.SetOutputFormat(OUTPUT_FORMAT::CSV);
+    // DEMSim.SetOutputContent(OUTPUT_CONTENT::FAMILY);
+    DEMSim.SetOutputContent(OUTPUT_CONTENT::XYZ);
 
     srand(759);
 
     float kg_g_conv = 1;
     float m_cm_cov = 1;
     // Define materials
-    auto mat_type_terrain = DEM_sim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
-    auto mat_type_wheel = DEM_sim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world
     double world_y_size = 2.0*m_cm_cov;
-    DEM_sim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
+    DEMSim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
     float bottom = -0.5*m_cm_cov;
-    DEM_sim.AddBCPlane(make_float3(0, 0, bottom), make_float3(0, 0, 1), mat_type_terrain);
-    DEM_sim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
-    DEM_sim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(0, 0, bottom), make_float3(0, 0, 1), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
     // X-dir bounding planes
-    DEM_sim.AddBCPlane(make_float3(-world_y_size * 2 / 2, 0, 0), make_float3(1, 0, 0), mat_type_terrain);
-    DEM_sim.AddBCPlane(make_float3(world_y_size * 2 / 2, 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(-world_y_size * 2 / 2, 0, 0), make_float3(1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(world_y_size * 2 / 2, 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
 
     // Define the wheel geometry
     float wheel_rad = 0.25*m_cm_cov;
@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
     float wheel_IYY = wheel_mass * wheel_rad * wheel_rad / 2;
     float wheel_IXX = (wheel_mass / 12) * (3 * wheel_rad * wheel_rad + wheel_width * wheel_width);
     float3 wheel_MOI = make_float3(wheel_IXX, wheel_IYY, wheel_IXX);
-    auto wheel_template = DEM_sim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
+    auto wheel_template = DEMSim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
     // The file contains no wheel particles size info, so let's manually set them
     wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01*m_cm_cov);
     // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
@@ -247,13 +247,13 @@ int main(int argc, char* argv[]) {
         std::for_each(this_template.radii.begin(), this_template.radii.end(), [scaling](float& r) { r *= scaling; });
         std::for_each(this_template.relPos.begin(), this_template.relPos.end(), [scaling](float3& r) { r *= scaling; });
         this_template.materials = std::vector<std::shared_ptr<DEMMaterial>>(this_template.nComp, mat_type_terrain);
-        ground_particle_templates.push_back(DEM_sim.LoadClumpType(this_template));
+        ground_particle_templates.push_back(DEMSim.LoadClumpType(this_template));
     }
 
     // Now we load part1 clump locations from a output file
     std::cout << "Making terrain..." << std::endl;
-    auto part1_clump_xyz = DEM_sim.ReadClumpXyzFromCsv("GRC_10e6.csv");
-    auto part1_clump_quaternion = DEM_sim.ReadClumpQuatFromCsv("GRC_10e6.csv");
+    auto part1_clump_xyz = DEMSim.ReadClumpXyzFromCsv("GRC_10e6.csv");
+    auto part1_clump_quaternion = DEMSim.ReadClumpQuatFromCsv("GRC_10e6.csv");
     std::vector<float3> in_xyz;
     std::vector<float4> in_quat;
     std::vector<std::shared_ptr<DEMClumpTemplate>> in_types;
@@ -287,7 +287,28 @@ int main(int argc, char* argv[]) {
     base_batch.SetPos(in_xyz);
     base_batch.SetOriQ(in_quat);
 
-    DEM_sim.AddClumps(base_batch);
+    DEMSim.AddClumps(base_batch);
+
+    // I also would like an `inverse batch', which is a batch of clumps that is the base batch flipped around
+    DEMClumpBatch inv_batch = base_batch;
+    std::vector<float3> inv_xyz = in_xyz;
+    std::vector<float4> inv_quat = in_quat;
+    float3 flip_center = make_float3(0, 0, bottom);
+    float3 flip_axis = make_float3(1, 0, 0);
+    std::for_each(inv_xyz.begin(), inv_xyz.end(), [flip_center, flip_axis](float3& xyz) {
+        xyz = flip_center + Rodrigues(xyz - flip_center, flip_axis, 3.14159);
+    });
+    std::for_each(inv_quat.begin(), inv_quat.end(), [flip_axis](float4& Q) { Q = RotateQuat(Q, flip_axis, 3.14159); });
+    // inv_batch.SetPos(inv_xyz);
+    inv_batch.SetOriQ(inv_quat);
+
+    // Based on the `base_batch', we can create more batches. For example, another batch that is like copy-paste the
+    // existing batch, then shift up for a small distance.
+    float shift_dist = 0.1;
+    // First put the inv batch above the base batch
+    std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
+    inv_batch.SetPos(inv_xyz);
+    DEMSim.AddClumps(inv_batch);
 
     /////////
     // Add wheel in DEM
@@ -295,39 +316,39 @@ int main(int argc, char* argv[]) {
     
     // Instantiate this wheel
     std::cout << "Making wheels..." << std::endl;
-    DEM_sim.SetFamilyFixed(100);
+    DEMSim.SetFamilyFixed(100);
     std::vector<std::shared_ptr<DEMTracker>> trackers;
     std::vector<std::shared_ptr<DEMClumpBatch>> DEM_Wheels;
     for (int i = 0; i < nW; i++) {
-        DEM_Wheels.push_back(DEM_sim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
+        DEM_Wheels.push_back(DEMSim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
         DEM_Wheels[i]->SetFamily(100);
-        trackers.push_back(DEM_sim.Track(DEM_Wheels[i]));
+        trackers.push_back(DEMSim.Track(DEM_Wheels[i]));
     }
 
     //////
     // Make ready for DEM simulation
     ///////
-    auto max_v_finder = DEM_sim.CreateInspector("clump_max_absv");
-    // auto max_z_finder = DEM_sim.CreateInspector("clump_max_z");
+    auto max_v_finder = DEMSim.CreateInspector("clump_max_absv");
+    // auto max_z_finder = DEMSim.CreateInspector("clump_max_z");
     // auto void_ratio_finder =
-    //     DEM_sim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
+    //     DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
     // float total_volume = 0.96 * 0.96 * 0.05;
 
     float base_step_size = 5e-7;
     float step_size = base_step_size;
     float base_vel = 0.4;
-    DEM_sim.SetCoordSysOrigin("center");
-    DEM_sim.SetInitTimeStep(step_size);
-    DEM_sim.SetGravitationalAcceleration(ChVec2Float(G));
+    DEMSim.SetCoordSysOrigin("center");
+    DEMSim.SetInitTimeStep(step_size);
+    DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
-    DEM_sim.SetCDUpdateFreq(10);
-    // DEM_sim.SetExpandFactor(1e-3);
-    DEM_sim.SetMaxVelocity(35.0);
-    DEM_sim.SetExpandSafetyParam(1.1);
-    DEM_sim.SetInitBinSize(scales.at(2));
-    DEM_sim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
+    DEMSim.SetCDUpdateFreq(10);
+    // DEMSim.SetExpandFactor(1e-3);
+    DEMSim.SetMaxVelocity(35.0);
+    DEMSim.SetExpandSafetyParam(1.1);
+    DEMSim.SetInitBinSize(scales.at(2));
+    DEMSim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
     
-    DEM_sim.Initialize();
+    DEMSim.Initialize();
     for (const auto& tracker : trackers) {
         std::cout << "A tracker is tracking owner " << tracker->obj->ownerID << std::endl;
     }
@@ -381,13 +402,13 @@ int main(int argc, char* argv[]) {
         if (frame_accu >= frame_accu_thres) {
             frame_accu = 0.;
             std::cout << "Frame: " << currframe << std::endl;
-            DEM_sim.ShowThreadCollaborationStats();
+            DEMSim.ShowThreadCollaborationStats();
             char filename[200];
             sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe++);
-            DEM_sim.WriteSphereFile(std::string(filename));
+            DEMSim.WriteSphereFile(std::string(filename));
         }
         // Run DEM first
-        DEM_sim.DoDynamics(step_size);
+        DEMSim.DoDynamics(step_size);
 
         // Then feed force
         for (int i = 0; i < nW; i++) {
@@ -405,36 +426,36 @@ int main(int argc, char* argv[]) {
 
         // if (curr_step % param_update_steps == 0 && t < 0.2) {
         // // if (t < 0.25) {
-        //     DEM_sim.DoDynamicsThenSync(0);
+        //     DEMSim.DoDynamicsThenSync(0);
         //     max_v = max_v_finder->GetValue();
         //     float multiplier = max_v / base_vel;
         //     step_size = base_step_size / multiplier;
-        //     DEM_sim.SetInitTimeStep(step_size);
-        //     // DEM_sim.SetMaxVelocity(max_v * 1.2);
-        //     DEM_sim.UpdateSimParams();
+        //     DEMSim.SetInitTimeStep(step_size);
+        //     // DEMSim.SetMaxVelocity(max_v * 1.2);
+        //     DEMSim.UpdateSimParams();
         //     std::cout << "Max vel in simulation is " << max_v << std::endl;
         //     std::cout << "Step size in simulation is " << step_size << std::endl;
         // }
 
         if (t > 0.3 && change_step == 0) {
-            DEM_sim.DoDynamicsThenSync(0);
+            DEMSim.DoDynamicsThenSync(0);
             step_size = 1e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.SetMaxVelocity(20.0);
-            DEM_sim.UpdateSimParams();
+            DEMSim.SetInitTimeStep(step_size);
+            DEMSim.SetMaxVelocity(20.0);
+            DEMSim.UpdateSimParams();
             change_step = 1;
         } else if (t > 0.4 && change_step == 1) {
-            DEM_sim.DoDynamicsThenSync(0);
+            DEMSim.DoDynamicsThenSync(0);
             step_size = 2e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.SetMaxVelocity(15.0);
-            DEM_sim.UpdateSimParams();
+            DEMSim.SetInitTimeStep(step_size);
+            DEMSim.SetMaxVelocity(15.0);
+            DEMSim.UpdateSimParams();
             change_step = 2;
         } else if (t > 0.5 && change_step == 2) {
-            DEM_sim.DoDynamicsThenSync(0);
+            DEMSim.DoDynamicsThenSync(0);
             step_size = 5e-6;
-            DEM_sim.SetInitTimeStep(step_size);
-            DEM_sim.UpdateSimParams();
+            DEMSim.SetInitTimeStep(step_size);
+            DEMSim.UpdateSimParams();
             change_step = 3;
         }
 
@@ -448,8 +469,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    DEM_sim.ShowThreadCollaborationStats();
-    DEM_sim.ShowTimingStats();
+    DEMSim.ShowThreadCollaborationStats();
+    DEMSim.ShowTimingStats();
 
     return 0;
 }
