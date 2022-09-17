@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
-    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.16), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.17), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -189,14 +189,15 @@ int main(int argc, char* argv[]) {
     srand(759);
 
     float kg_g_conv = 1;
+    float m_cm_cov = 1;
     // Define materials
-    auto mat_type_terrain = DEM_sim.LoadMaterial({{"E", 2e9 * kg_g_conv}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
-    auto mat_type_wheel = DEM_sim.LoadMaterial({{"E", 1e9 * kg_g_conv}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_terrain = DEM_sim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_wheel = DEM_sim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world
-    double world_y_size = 2.0;
+    double world_y_size = 2.0*m_cm_cov;
     DEM_sim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
-    float bottom = -0.5;
+    float bottom = -0.5*m_cm_cov;
     DEM_sim.AddBCPlane(make_float3(0, 0, bottom), make_float3(0, 0, 1), mat_type_terrain);
     DEM_sim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
     DEM_sim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
@@ -205,8 +206,8 @@ int main(int argc, char* argv[]) {
     DEM_sim.AddBCPlane(make_float3(world_y_size * 2 / 2, 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
 
     // Define the wheel geometry
-    float wheel_rad = 0.25;
-    float wheel_width = 0.25;
+    float wheel_rad = 0.25*m_cm_cov;
+    float wheel_width = 0.25*m_cm_cov;
     wheel_mass *= kg_g_conv;  // in kg or g
     // Our shelf wheel geometry is lying flat on ground with z being the axial direction
     float wheel_IYY = wheel_mass * wheel_rad * wheel_rad / 2;
@@ -214,7 +215,7 @@ int main(int argc, char* argv[]) {
     float3 wheel_MOI = make_float3(wheel_IXX, wheel_IYY, wheel_IXX);
     auto wheel_template = DEM_sim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
     // The file contains no wheel particles size info, so let's manually set them
-    wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01);
+    wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01*m_cm_cov);
     // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
     // along X direction. Let's make it clear its principal axes is not what we used to report its component 
     // sphere relative positions.
@@ -225,7 +226,9 @@ int main(int argc, char* argv[]) {
     shape_template.ReadComponentFromFile("../data/clumps/triangular_flat.csv");
     // Calculate its mass and MOI
     float mass = 2.6e3 * 5.5886717 * kg_g_conv;  // in kg or g
-    float3 MOI = make_float3(1.8327927, 2.1580013, 0.77010059) * 2.6e3 * kg_g_conv;
+    float3 MOI = make_float3(1.8327927, 2.1580013, 0.77010059) * (double)2.6e3 * kg_g_conv/m_cm_cov/m_cm_cov;
+    std::for_each(shape_template.radii.begin(), shape_template.radii.end(), [m_cm_cov](float& r) { r *= m_cm_cov; });
+    std::for_each(shape_template.relPos.begin(), shape_template.relPos.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
     // Scale the template we just created
     std::vector<std::shared_ptr<DEMClumpTemplate>> ground_particle_templates;
     std::vector<double> scales = {0.0014, 0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
@@ -272,6 +275,7 @@ int main(int argc, char* argv[]) {
                                                                  ground_particle_templates.at(t_num - 1));
 
         // Add them to the big long vector
+        std::for_each(this_type_xyz.begin(), this_type_xyz.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
         in_xyz.insert(in_xyz.end(), this_type_xyz.begin(), this_type_xyz.end());
         in_quat.insert(in_quat.end(), this_type_quat.begin(), this_type_quat.end());
         in_types.insert(in_types.end(), this_type.begin(), this_type.end());
@@ -296,7 +300,6 @@ int main(int argc, char* argv[]) {
     std::vector<std::shared_ptr<DEMClumpBatch>> DEM_Wheels;
     for (int i = 0; i < nW; i++) {
         DEM_Wheels.push_back(DEM_sim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
-        // DEM_Wheel->SetOriQ(make_float4(0.7071, 0.7071, 0, 0));
         DEM_Wheels[i]->SetFamily(100);
         trackers.push_back(DEM_sim.Track(DEM_Wheels[i]));
     }
@@ -319,7 +322,7 @@ int main(int argc, char* argv[]) {
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
     DEM_sim.SetCDUpdateFreq(10);
     // DEM_sim.SetExpandFactor(1e-3);
-    DEM_sim.SetMaxVelocity(15.0);
+    DEM_sim.SetMaxVelocity(35.0);
     DEM_sim.SetExpandSafetyParam(1.1);
     DEM_sim.SetInitBinSize(scales.at(2));
     DEM_sim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
@@ -353,7 +356,11 @@ int main(int argc, char* argv[]) {
     float max_v;
     int change_step = 0;
     float frame_accu = frame_accu_thres;
-    for (float t = 0; t < time_end; t += step_size, curr_step++) {
+
+    // Find max z
+    // float init_max_z = 
+    // 0.268923
+    for (float t = 0; t < time_end; t += step_size, curr_step++, frame_accu += step_size) {
         for (int i = 0; i < nW; i++) {
             wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
             trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
@@ -378,7 +385,6 @@ int main(int argc, char* argv[]) {
             char filename[200];
             sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe++);
             DEM_sim.WriteSphereFile(std::string(filename));
-            DEM_sim.ShowThreadCollaborationStats();
         }
         // Run DEM first
         DEM_sim.DoDynamics(step_size);
@@ -396,7 +402,6 @@ int main(int argc, char* argv[]) {
         sys.DoStepDynamics(step_size);
         viper.Update();
         t += step_size;
-        frame_accu += step_size;
 
         // if (curr_step % param_update_steps == 0 && t < 0.2) {
         // // if (t < 0.25) {
@@ -411,19 +416,21 @@ int main(int argc, char* argv[]) {
         //     std::cout << "Step size in simulation is " << step_size << std::endl;
         // }
 
-        if (t > 0.2 && change_step == 0) {
+        if (t > 0.3 && change_step == 0) {
             DEM_sim.DoDynamicsThenSync(0);
             step_size = 1e-6;
             DEM_sim.SetInitTimeStep(step_size);
+            DEM_sim.SetMaxVelocity(20.0);
             DEM_sim.UpdateSimParams();
             change_step = 1;
-        } else if (t > 0.3 && change_step == 1) {
+        } else if (t > 0.4 && change_step == 1) {
             DEM_sim.DoDynamicsThenSync(0);
             step_size = 2e-6;
             DEM_sim.SetInitTimeStep(step_size);
+            DEM_sim.SetMaxVelocity(15.0);
             DEM_sim.UpdateSimParams();
             change_step = 2;
-        } else if (t > 0.4 && change_step == 2) {
+        } else if (t > 0.5 && change_step == 2) {
             DEM_sim.DoDynamicsThenSync(0);
             step_size = 5e-6;
             DEM_sim.SetInitTimeStep(step_size);
