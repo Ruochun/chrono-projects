@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
     }
 
     //////////////////////////////////////////////
-    // Now step up SMUG
+    // Now step up DEME
     //////////////////////////////////////////////
 
     DEMSolver DEMSim;
@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
 
     float kg_g_conv = 1;
     // Define materials
-    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 2e9 * kg_g_conv}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
     auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world

@@ -84,6 +84,8 @@ inline float4 ChQ2Float(const ChQuaternion<>& Q) {
     return f4;
 }
 
+void SaveParaViewFiles(Viper& rover, path& rover_dir, unsigned int frame_number);
+
 // Return customized wheel material parameters
 std::shared_ptr<ChMaterialSurface> CustomWheelMaterial(ChContactMethod contact_method) {
     float mu = 0.4f;   // coefficient of friction
@@ -158,7 +160,7 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
-    viper.Initialize(ChFrame<>(ChVector<>(-0.5, -0.0, -0.17), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.75, -0.0, -0.17), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -177,7 +179,7 @@ int main(int argc, char* argv[]) {
     }
 
     //////////////////////////////////////////////
-    // Now step up SMUG
+    // Now step up DEME
     //////////////////////////////////////////////
 
     DEMSolver DEMSim;
@@ -191,19 +193,21 @@ int main(int argc, char* argv[]) {
     float kg_g_conv = 1;
     float m_cm_cov = 1;
     // Define materials
-    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
-    auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e7 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world
+    double world_x_size = 3.0*m_cm_cov;
     double world_y_size = 2.0*m_cm_cov;
-    DEMSim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
+    DEMSim.InstructBoxDomainDimension(world_x_size, world_y_size, world_y_size);
+    // DEMSim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
     float bottom = -0.5*m_cm_cov;
     DEMSim.AddBCPlane(make_float3(0, 0, bottom), make_float3(0, 0, 1), mat_type_terrain);
     DEMSim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
     DEMSim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
     // X-dir bounding planes
-    DEMSim.AddBCPlane(make_float3(-world_y_size * 2 / 2, 0, 0), make_float3(1, 0, 0), mat_type_terrain);
-    DEMSim.AddBCPlane(make_float3(world_y_size * 2 / 2, 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(-world_x_size / 3. * 2., 0, 0), make_float3(1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(world_x_size / 3., 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
 
     // Define the wheel geometry
     float wheel_rad = 0.25*m_cm_cov;
@@ -281,6 +285,28 @@ int main(int argc, char* argv[]) {
         in_types.insert(in_types.end(), this_type.begin(), this_type.end());
         std::cout << "Added clump type " << t_num << std::endl;
     }
+    // Remove some elements maybe? Makes it run faster...
+    std::vector<notStupidBool_t> elem_to_remove(in_xyz.size(), 0);
+    for (size_t i = 0; i < in_xyz.size(); i++) {
+        if (in_xyz.at(i).x > 1.0 - 0.01)
+            elem_to_remove.at(i) = 1;
+    }
+    in_xyz.erase(
+        std::remove_if(in_xyz.begin(), in_xyz.end(),
+                       [&elem_to_remove, &in_xyz](const float3& i) { return elem_to_remove.at(&i - in_xyz.data());
+                       }),
+        in_xyz.end());
+    in_quat.erase(
+        std::remove_if(in_quat.begin(), in_quat.end(),
+                       [&elem_to_remove, &in_quat](const float4& i) { return elem_to_remove.at(&i - in_quat.data());
+                       }),
+        in_quat.end());
+    in_types.erase(
+        std::remove_if(in_types.begin(), in_types.end(),
+                       [&elem_to_remove, &in_types](const auto& i) { return elem_to_remove.at(&i - in_types.data());
+                       }),
+        in_types.end());
+
     // Finally, load the info into this batch
     DEMClumpBatch base_batch(in_xyz.size());
     base_batch.SetTypes(in_types);
@@ -304,7 +330,7 @@ int main(int argc, char* argv[]) {
 
     // Based on the `base_batch', we can create more batches. For example, another batch that is like copy-paste the
     // existing batch, then shift up for a small distance.
-    float shift_dist = 0.1;
+    float shift_dist = 0.11;
     // First put the inv batch above the base batch
     std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
     inv_batch.SetPos(inv_xyz);
@@ -324,20 +350,30 @@ int main(int argc, char* argv[]) {
         DEM_Wheels[i]->SetFamily(100);
         trackers.push_back(DEMSim.Track(DEM_Wheels[i]));
     }
+    DEMSim.DisableFamilyOutput(100); // no need outputting wheels
+    DEMSim.DisableContactBetweenFamilies(100, 0); // No wheel-ground contact while settling
 
     //////
     // Make ready for DEM simulation
     ///////
     auto max_v_finder = DEMSim.CreateInspector("clump_max_absv");
-    // auto max_z_finder = DEMSim.CreateInspector("clump_max_z");
-    // auto void_ratio_finder =
-    //     DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
-    // float total_volume = 0.96 * 0.96 * 0.05;
+    auto max_z_finder = DEMSim.CreateInspector("clump_max_z");
+    auto void_ratio_finder =
+        DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
+    float total_volume = 0.96 * 0.96 * 0.05;
+
+    // Now add a plane to compress the `road'
+    auto compressor = DEMSim.AddExternalObject();
+    compressor->AddPlane(make_float3(0, 0, 0), make_float3(0, 0, -1), mat_type_terrain);
+    compressor->SetFamily(90);
+    DEMSim.SetFamilyFixed(90);
+    DEMSim.DisableContactBetweenFamilies(90, 100); // no contact between compressor and wheels
+    auto compressor_tracker = DEMSim.Track(compressor);
 
     float base_step_size = 5e-7;
     float step_size = base_step_size;
     float base_vel = 0.4;
-    DEMSim.SetCoordSysOrigin("center");
+    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/3.*2., world_y_size/2., world_y_size/2.));
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
@@ -355,23 +391,104 @@ int main(int argc, char* argv[]) {
     std::cout << "End initialization" << std::endl;
 
     ///////////////////////////////////////////
-    // Real simulation
+    // Compress the road first
     ///////////////////////////////////////////
 
-    float time_end = 2.0;
-    unsigned int fps = 60;
+    float time_end = 8.0;
+    unsigned int fps = 20;
     unsigned int report_freq = 50000;
     unsigned int param_update_freq = 50000;
-    // unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
+    unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
     float frame_accu_thres = 1.0 / fps;
     unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));
     unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * step_size));
 
     path out_dir = current_path();
-    out_dir += "/Viper_on_GRC";
+    out_dir += "/Viper_on_GRC_A100";
+    path rover_dir = out_dir / "./rover";
     create_directory(out_dir);
+    create_directory(rover_dir);
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
+
+    step_size = 1e-6;
+    DEMSim.SetInitTimeStep(step_size);
+    DEMSim.UpdateSimParams();
+    // Settle for a while...
+    for (float t = 0; t < 0.3; t += step_size, curr_step++) {
+        if (curr_step % out_steps == 0) {
+             std::cout << "Frame: " << currframe << std::endl;
+            DEMSim.ShowThreadCollaborationStats();
+            char filename[200];
+            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
+            DEMSim.WriteSphereFile(std::string(filename));
+            SaveParaViewFiles(viper, rover_dir, currframe);
+            currframe++;
+        }
+        DEMSim.DoDynamics(step_size);
+    }
+    // Start compressing
+    DEMSim.DoDynamicsThenSync(0);
+    step_size = 2e-6;
+    DEMSim.SetInitTimeStep(step_size);
+    DEMSim.UpdateSimParams();
+
+    double now_z = -0.41;
+    compressor_tracker->SetPos(make_float3(0, 0, now_z));
+    float compress_time = 0.3;
+    double compressor_final_dist = 0.41-0.37;
+    double compressor_v = compressor_final_dist / compress_time;
+    for (float t = 0; t < compress_time; t += step_size, curr_step++) {
+        if (curr_step % out_steps == 0) {
+             std::cout << "Frame: " << currframe << std::endl;
+            DEMSim.ShowThreadCollaborationStats();
+            char filename[200];
+            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
+            DEMSim.WriteSphereFile(std::string(filename));
+            SaveParaViewFiles(viper, rover_dir, currframe);
+            currframe++;
+        }
+        now_z -= compressor_v * step_size;
+        compressor_tracker->SetPos(make_float3(0, 0, now_z));
+        DEMSim.DoDynamics(step_size);
+    }
+    for (float t = 0; t < compress_time; t += step_size, curr_step++) {
+        if (curr_step % out_steps == 0) {
+             std::cout << "Frame: " << currframe << std::endl;
+            DEMSim.ShowThreadCollaborationStats();
+            char filename[200];
+            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
+            DEMSim.WriteSphereFile(std::string(filename));
+            SaveParaViewFiles(viper, rover_dir, currframe);
+            currframe++;
+        }
+        now_z += compressor_v * step_size;
+        compressor_tracker->SetPos(make_float3(0, 0, now_z));
+        DEMSim.DoDynamics(step_size);
+    }
+
+    DEMSim.DisableContactBetweenFamilies(90, 0);
+    DEMSim.DoDynamicsThenSync(0);
+    step_size = 5e-7;
+    DEMSim.SetInitTimeStep(step_size);
+    DEMSim.UpdateSimParams();
+
+    DEMSim.EnableContactBetweenFamilies(100, 0); // Re-enable wheel-ground contact
+
+    float matter_volume = void_ratio_finder->GetValue();
+    std::cout << "Void ratio now: " << (total_volume - matter_volume) / matter_volume << std::endl;
+    std::cout << "========================" << std::endl;
+
+    ///////////////////////////////////////////
+    // Real simulation
+    ///////////////////////////////////////////
+
+    // Timers 
+    std::chrono::high_resolution_clock::time_point h_start, d_start;
+    std::chrono::high_resolution_clock::time_point h_end, d_end;
+    std::chrono::duration<double> h_total, d_total;
+    h_total = std::chrono::duration<double>(0);
+    d_total = std::chrono::duration<double>(0);
 
     std::vector<ChQuaternion<>> wheel_rot(4);
     float max_v;
@@ -404,11 +521,16 @@ int main(int argc, char* argv[]) {
             std::cout << "Frame: " << currframe << std::endl;
             DEMSim.ShowThreadCollaborationStats();
             char filename[200];
-            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe++);
+            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
             DEMSim.WriteSphereFile(std::string(filename));
+            SaveParaViewFiles(viper, rover_dir, currframe);
+            currframe++;
         }
         // Run DEM first
+        d_start = std::chrono::high_resolution_clock::now();
         DEMSim.DoDynamics(step_size);
+        d_end = std::chrono::high_resolution_clock::now();
+        d_total += d_end - d_start;
 
         // Then feed force
         for (int i = 0; i < nW; i++) {
@@ -420,9 +542,14 @@ int main(int argc, char* argv[]) {
             Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
             Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SMUG is local
         }
+        h_start = std::chrono::high_resolution_clock::now();
         sys.DoStepDynamics(step_size);
         viper.Update();
+        h_end = std::chrono::high_resolution_clock::now();
+        h_total += h_end - h_start;
+
         t += step_size;
+        frame_accu += step_size;
 
         // if (curr_step % param_update_steps == 0 && t < 0.2) {
         // // if (t < 0.25) {
@@ -468,9 +595,228 @@ int main(int argc, char* argv[]) {
             std::cout << "========================" << std::endl;
         }
     }
+    std::cout << h_total.count() << " seconds spent on host"  << std::endl;
+    std::cout << d_total.count() << " seconds spent on device"  << std::endl;
 
     DEMSim.ShowThreadCollaborationStats();
     DEMSim.ShowTimingStats();
 
     return 0;
+}
+
+//------------------------------------------------------------------
+// Function to save the povray files of the MBD
+//------------------------------------------------------------------
+void SaveParaViewFiles(Viper& rover, path& rover_dir, unsigned int frame_number) {
+    path filename;
+    
+    char f_name[20];
+    sprintf(f_name, "%04d", frame_number);
+    filename = rover_dir / ("./viper_" + std::string(f_name) + ".obj");
+
+    std::vector<geometry::ChTriangleMeshConnected> meshes;
+
+    // save the VIPER body to obj/vtk files
+    for (int i = 0; i < 1; i++) {
+        auto body = rover.GetChassis()->GetBody();
+        ChFrame<> body_ref_frame = body->GetFrame_REF_to_abs();
+        ChVector<> body_pos = body_ref_frame.GetPos();      // body->GetPos();
+        ChQuaternion<> body_rot = body_ref_frame.GetRot();  // body->GetRot();
+
+        auto mmesh = chrono_types::make_shared<ChTriangleMeshConnected>();
+        std::string obj_path = (GetChronoDataFile("robot/viper/obj/viper_chassis.obj"));
+        double scale_ratio = 1.0;
+        mmesh->LoadWavefrontMesh(obj_path, false, true);
+        mmesh->Transform(ChVector<>(0, 0, 0), ChMatrix33<>(scale_ratio));  // scale to a different size
+        mmesh->RepairDuplicateVertexes(1e-9);                              // if meshes are not watertight
+
+        double mmass;
+        ChVector<> mcog;
+        ChMatrix33<> minertia;
+        mmesh->ComputeMassProperties(true, mmass, mcog, minertia);
+        mmesh->Transform(body_pos, ChMatrix33<>(body_rot));  // rotate the mesh based on the orientation of body
+
+        // filename = rover_dir / ("./body_" + std::string(f_name) + ".obj");
+        // std::vector<geometry::ChTriangleMeshConnected> meshes = {*mmesh};
+        // geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+        meshes.push_back(*mmesh);
+    }
+
+    // save the wheels to obj/vtk files
+    for (int i = 0; i < 4; i++) {
+        std::shared_ptr<ChBodyAuxRef> body;
+        if (i == 0) {
+            body = rover.GetWheel(ViperWheelID::V_LF)->GetBody();
+        }
+        if (i == 1) {
+            body = rover.GetWheel(ViperWheelID::V_RF)->GetBody();
+        }
+        if (i == 2) {
+            body = rover.GetWheel(ViperWheelID::V_LB)->GetBody();
+        }
+        if (i == 3) {
+            body = rover.GetWheel(ViperWheelID::V_RB)->GetBody();
+        }
+
+        ChFrame<> body_ref_frame = body->GetFrame_REF_to_abs();
+        ChVector<> body_pos = body_ref_frame.GetPos();      // body->GetPos();
+        ChQuaternion<> body_rot = body_ref_frame.GetRot();  // body->GetRot();
+        if (i == 0 || i == 2) {
+            body_rot.Cross(body_rot, Q_from_AngZ(CH_C_PI));
+        }
+
+        auto mmesh = chrono_types::make_shared<ChTriangleMeshConnected>();
+        std::string obj_path = GetChronoDataFile("robot/viper/obj/viper_wheel.obj");
+        double scale_ratio = 1.0;
+        mmesh->LoadWavefrontMesh(obj_path, false, true);
+        mmesh->Transform(ChVector<>(0, 0, 0), ChMatrix33<>(scale_ratio));  // scale to a different size
+        mmesh->RepairDuplicateVertexes(1e-9);                              // if meshes are not watertight
+
+        double mmass;
+        ChVector<> mcog;
+        ChMatrix33<> minertia;
+        mmesh->ComputeMassProperties(true, mmass, mcog, minertia);
+        mmesh->Transform(body_pos, ChMatrix33<>(body_rot));  // rotate the mesh based on the orientation of body
+
+        // filename = rover_dir / ("./wheel_" + std::to_string(i + 1) + "_" + std::string(f_name) + ".obj");
+        // std::vector<geometry::ChTriangleMeshConnected> meshes = {*mmesh};
+        // geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+        meshes.push_back(*mmesh);
+    }
+
+    // save the steering rod to obj/vtk files
+    for (int i = 0; i < 4; i++) {
+        std::shared_ptr<ChBodyAuxRef> body;
+        if (i == 0) {
+            body = rover.GetUpright(ViperWheelID::V_LF)->GetBody();
+        }
+        if (i == 1) {
+            body = rover.GetUpright(ViperWheelID::V_RF)->GetBody();
+        }
+        if (i == 2) {
+            body = rover.GetUpright(ViperWheelID::V_LB)->GetBody();
+        }
+        if (i == 3) {
+            body = rover.GetUpright(ViperWheelID::V_RB)->GetBody();
+        }
+        ChFrame<> body_ref_frame = body->GetFrame_REF_to_abs();
+        ChVector<> body_pos = body_ref_frame.GetPos();      // body->GetPos();
+        ChQuaternion<> body_rot = body_ref_frame.GetRot();  // body->GetRot();
+
+        auto mmesh = chrono_types::make_shared<ChTriangleMeshConnected>();
+        std::string obj_path = "";
+        if (i == 0 || i == 2) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_L_steer.obj");
+        }
+        if (i == 1 || i == 3) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_R_steer.obj");
+        }
+        double scale_ratio = 1.0;
+        mmesh->LoadWavefrontMesh(obj_path, false, true);
+        mmesh->Transform(ChVector<>(0, 0, 0), ChMatrix33<>(scale_ratio));  // scale to a different size
+        mmesh->RepairDuplicateVertexes(1e-9);                              // if meshes are not watertight
+
+        double mmass;
+        ChVector<> mcog;
+        ChMatrix33<> minertia;
+        mmesh->ComputeMassProperties(true, mmass, mcog, minertia);
+        mmesh->Transform(body_pos, ChMatrix33<>(body_rot));  // rotate the mesh based on the orientation of body
+
+        // filename = rover_dir / ("./steerRod_" + std::to_string(i + 1) + "_" + std::string(f_name) + ".obj");
+        // std::vector<geometry::ChTriangleMeshConnected> meshes = {*mmesh};
+        // geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+        meshes.push_back(*mmesh);
+    }
+
+    // save the lower rod to obj/vtk files
+    for (int i = 0; i < 4; i++) {
+        std::shared_ptr<ChBodyAuxRef> body;
+        if (i == 0) {
+            body = rover.GetLowerArm(ViperWheelID::V_LF)->GetBody();
+        }
+        if (i == 1) {
+            body = rover.GetLowerArm(ViperWheelID::V_RF)->GetBody();
+        }
+        if (i == 2) {
+            body = rover.GetLowerArm(ViperWheelID::V_LB)->GetBody();
+        }
+        if (i == 3) {
+            body = rover.GetLowerArm(ViperWheelID::V_RB)->GetBody();
+        }
+        ChFrame<> body_ref_frame = body->GetFrame_REF_to_abs();
+        ChVector<> body_pos = body_ref_frame.GetPos();      // body->GetPos();
+        ChQuaternion<> body_rot = body_ref_frame.GetRot();  // body->GetRot();
+
+        auto mmesh = chrono_types::make_shared<ChTriangleMeshConnected>();
+        std::string obj_path = "";
+        if (i == 0 || i == 2) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_L_bt_sus.obj");
+        }
+        if (i == 1 || i == 3) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_R_bt_sus.obj");
+        }
+        double scale_ratio = 1.0;
+        mmesh->LoadWavefrontMesh(obj_path, false, true);
+        mmesh->Transform(ChVector<>(0, 0, 0), ChMatrix33<>(scale_ratio));  // scale to a different size
+        mmesh->RepairDuplicateVertexes(1e-9);                              // if meshes are not watertight
+
+        double mmass;
+        ChVector<> mcog;
+        ChMatrix33<> minertia;
+        mmesh->ComputeMassProperties(true, mmass, mcog, minertia);
+        mmesh->Transform(body_pos, ChMatrix33<>(body_rot));  // rotate the mesh based on the orientation of body
+
+        // filename = rover_dir / ("./lowerRod_" + std::to_string(i + 1) + "_" + std::string(f_name) + ".obj");
+        // std::vector<geometry::ChTriangleMeshConnected> meshes = {*mmesh};
+        // geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+        meshes.push_back(*mmesh);
+    }
+
+    // save the upper rod to obj/vtk files
+    for (int i = 0; i < 4; i++) {
+        std::shared_ptr<ChBodyAuxRef> body;
+        if (i == 0) {
+            body = rover.GetUpperArm(ViperWheelID::V_LF)->GetBody();
+        }
+        if (i == 1) {
+            body = rover.GetUpperArm(ViperWheelID::V_RF)->GetBody();
+        }
+        if (i == 2) {
+            body = rover.GetUpperArm(ViperWheelID::V_LB)->GetBody();
+        }
+        if (i == 3) {
+            body = rover.GetUpperArm(ViperWheelID::V_RB)->GetBody();
+        }
+        ChFrame<> body_ref_frame = body->GetFrame_REF_to_abs();
+        ChVector<> body_pos = body_ref_frame.GetPos();      // body->GetPos();
+        ChQuaternion<> body_rot = body_ref_frame.GetRot();  // body->GetRot();
+
+        auto mmesh = chrono_types::make_shared<ChTriangleMeshConnected>();
+        std::string obj_path = "";
+        if (i == 0 || i == 2) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_L_up_sus.obj");
+        }
+        if (i == 1 || i == 3) {
+            obj_path = GetChronoDataFile("robot/viper/obj/viper_R_up_sus.obj");
+        }
+
+        double scale_ratio = 1.0;
+        mmesh->LoadWavefrontMesh(obj_path, false, true);
+        mmesh->Transform(ChVector<>(0, 0, 0), ChMatrix33<>(scale_ratio));  // scale to a different size
+        mmesh->RepairDuplicateVertexes(1e-9);                              // if meshes are not watertight
+
+        double mmass;
+        ChVector<> mcog;
+        ChMatrix33<> minertia;
+        mmesh->ComputeMassProperties(true, mmass, mcog, minertia);
+        mmesh->Transform(body_pos, ChMatrix33<>(body_rot));  // rotate the mesh based on the orientation of body
+
+        // filename = rover_dir / ("./upperRod_" + std::to_string(i + 1) + "_" + std::string(f_name) + ".obj");
+        // std::vector<geometry::ChTriangleMeshConnected> meshes = {*mmesh};
+        // geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+        meshes.push_back(*mmesh);
+    }
+
+    geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
+
 }
