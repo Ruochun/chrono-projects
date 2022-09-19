@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
-    viper.Initialize(ChFrame<>(ChVector<>(-0.75, -0.0, -0.17), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.75, -0.0, -0.13), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -235,8 +235,8 @@ int main(int argc, char* argv[]) {
     std::for_each(shape_template.relPos.begin(), shape_template.relPos.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
     // Scale the template we just created
     std::vector<std::shared_ptr<DEMClumpTemplate>> ground_particle_templates;
-    std::vector<double> scales = {0.0014, 0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
-    std::for_each(scales.begin(), scales.end(), [](double& r) { r *= 10.; });
+    std::vector<double> scales = {0.0010, 0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
+    std::for_each(scales.begin(), scales.end(), [](double& r) { r *= 20.; });
     for (double scaling : scales) {
         auto this_template = shape_template;
         this_template.mass = (double)mass * scaling * scaling * scaling;
@@ -256,85 +256,88 @@ int main(int argc, char* argv[]) {
 
     // Now we load part1 clump locations from a output file
     std::cout << "Making terrain..." << std::endl;
-    auto part1_clump_xyz = DEMSim.ReadClumpXyzFromCsv("GRC_10e6.csv");
-    auto part1_clump_quaternion = DEMSim.ReadClumpQuatFromCsv("GRC_10e6.csv");
-    std::vector<float3> in_xyz;
-    std::vector<float4> in_quat;
-    std::vector<std::shared_ptr<DEMClumpTemplate>> in_types;
-    unsigned int t_num = 0;
-    for (int i = 0; i < scales.size(); i++) {
-        // Our template names are 0001, 0002 etc.
-        t_num++;
-        char t_name[20];
-        sprintf(t_name, "%04d", t_num);
+    std::vector<float> x_shift_dist = {-1.5, -0.5, 0.5};
+    std::vector<float> y_shift_dist = {-0.5, 0.5};
 
-        auto this_type_xyz = part1_clump_xyz[std::string(t_name)];
-        auto this_type_quat = part1_clump_quaternion[std::string(t_name)];
+    for (float x_shift : x_shift_dist) {
+        for (float y_shift : y_shift_dist) {
+            auto part1_clump_xyz = DEMSim.ReadClumpXyzFromCsv("./GRC_2e5_reduced.csv");
+            auto part1_clump_quaternion = DEMSim.ReadClumpQuatFromCsv("./GRC_2e5_reduced.csv");
+            std::vector<float3> in_xyz;
+            std::vector<float4> in_quat;
+            std::vector<std::shared_ptr<DEMClumpTemplate>> in_types;
+            unsigned int t_num = 0;
+            for (int i = 0; i < scales.size(); i++) {
+                // Our template names are 0001, 0002 etc.
+                t_num++;
+                char t_name[20];
+                sprintf(t_name, "%04d", t_num);
 
-        size_t n_clump_this_type = this_type_xyz.size();
-        std::cout << "Loading clump " << std::string(t_name) << " which has particle num: " << n_clump_this_type << std::endl;
-        // Prepare clump type identification vector for loading into the system (don't forget type 0 in
-        // ground_particle_templates is the template for rover wheel)
-        std::vector<std::shared_ptr<DEMClumpTemplate>> this_type(n_clump_this_type,
-                                                                 ground_particle_templates.at(t_num - 1));
+                auto this_type_xyz = part1_clump_xyz[std::string(t_name)];
+                auto this_type_quat = part1_clump_quaternion[std::string(t_name)];
 
-        // Add them to the big long vector
-        std::for_each(this_type_xyz.begin(), this_type_xyz.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
-        in_xyz.insert(in_xyz.end(), this_type_xyz.begin(), this_type_xyz.end());
-        in_quat.insert(in_quat.end(), this_type_quat.begin(), this_type_quat.end());
-        in_types.insert(in_types.end(), this_type.begin(), this_type.end());
-        std::cout << "Added clump type " << t_num << std::endl;
+                size_t n_clump_this_type = this_type_xyz.size();
+                std::cout << "Loading clump " << std::string(t_name) << " which has particle num: " << n_clump_this_type << std::endl;
+                // Prepare clump type identification vector for loading into the system (don't forget type 0 in
+                // ground_particle_templates is the template for rover wheel)
+                std::vector<std::shared_ptr<DEMClumpTemplate>> this_type(n_clump_this_type,
+                                                                        ground_particle_templates.at(t_num - 1));
+
+                // Add them to the big long vector
+                std::for_each(this_type_xyz.begin(), this_type_xyz.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
+                in_xyz.insert(in_xyz.end(), this_type_xyz.begin(), this_type_xyz.end());
+                in_quat.insert(in_quat.end(), this_type_quat.begin(), this_type_quat.end());
+                in_types.insert(in_types.end(), this_type.begin(), this_type.end());
+                std::cout << "Added clump type " << t_num << std::endl;
+            }
+
+            // Now, apply x_ and y-shifts
+            std::for_each(in_xyz.begin(), in_xyz.end(), [x_shift, y_shift](float3& xyz) {
+                xyz.x += x_shift;
+                xyz.y += y_shift;
+            });
+
+            // Finally, load the info into this batch
+            DEMClumpBatch base_batch(in_xyz.size());
+            base_batch.SetTypes(in_types);
+            base_batch.SetPos(in_xyz);
+            base_batch.SetOriQ(in_quat);
+
+            DEMSim.AddClumps(base_batch);
+
+            // I also would like an `inverse batch', which is a batch of clumps that is the base batch flipped around
+            DEMClumpBatch inv_batch = base_batch;
+            std::vector<float3> inv_xyz = in_xyz;
+            std::vector<float4> inv_quat = in_quat;
+            float3 flip_center = make_float3(x_shift, y_shift, bottom);
+            float3 flip_axis = make_float3(1, 0, 0);
+            std::for_each(inv_xyz.begin(), inv_xyz.end(), [flip_center, flip_axis](float3& xyz) {
+                xyz = flip_center + Rodrigues(xyz - flip_center, flip_axis, 3.14159);
+            });
+            std::for_each(inv_quat.begin(), inv_quat.end(), [flip_axis](float4& Q) { Q = RotateQuat(Q, flip_axis, 3.14159); });
+            // inv_batch.SetPos(inv_xyz);
+            inv_batch.SetOriQ(inv_quat);
+
+            // Based on the `base_batch', we can create more batches. For example, another batch that is like copy-paste the
+            // existing batch, then shift up for a small distance.
+            float shift_dist = 0.15;
+            // First put the inv batch above the base batch
+            std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist / 2.0; });
+            inv_batch.SetPos(inv_xyz);
+            DEMSim.AddClumps(inv_batch);
+            // Add another 4 layers of such graular bed
+            for (int i = 0; i < 2; i++) {
+                DEMClumpBatch another_batch = base_batch;
+                std::for_each(in_xyz.begin(), in_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
+                another_batch.SetPos(in_xyz);
+                DEMSim.AddClumps(another_batch);
+                DEMClumpBatch another_inv_batch = inv_batch;
+                std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
+                another_inv_batch.SetPos(inv_xyz);
+                DEMSim.AddClumps(another_inv_batch);
+            }
+        }
     }
-    // Remove some elements maybe? Makes it run faster...
-    std::vector<notStupidBool_t> elem_to_remove(in_xyz.size(), 0);
-    for (size_t i = 0; i < in_xyz.size(); i++) {
-        if (in_xyz.at(i).x > 1.0 - 0.01)
-            elem_to_remove.at(i) = 1;
-    }
-    in_xyz.erase(
-        std::remove_if(in_xyz.begin(), in_xyz.end(),
-                       [&elem_to_remove, &in_xyz](const float3& i) { return elem_to_remove.at(&i - in_xyz.data());
-                       }),
-        in_xyz.end());
-    in_quat.erase(
-        std::remove_if(in_quat.begin(), in_quat.end(),
-                       [&elem_to_remove, &in_quat](const float4& i) { return elem_to_remove.at(&i - in_quat.data());
-                       }),
-        in_quat.end());
-    in_types.erase(
-        std::remove_if(in_types.begin(), in_types.end(),
-                       [&elem_to_remove, &in_types](const auto& i) { return elem_to_remove.at(&i - in_types.data());
-                       }),
-        in_types.end());
-
-    // Finally, load the info into this batch
-    DEMClumpBatch base_batch(in_xyz.size());
-    base_batch.SetTypes(in_types);
-    base_batch.SetPos(in_xyz);
-    base_batch.SetOriQ(in_quat);
-
-    DEMSim.AddClumps(base_batch);
-
-    // I also would like an `inverse batch', which is a batch of clumps that is the base batch flipped around
-    DEMClumpBatch inv_batch = base_batch;
-    std::vector<float3> inv_xyz = in_xyz;
-    std::vector<float4> inv_quat = in_quat;
-    float3 flip_center = make_float3(0, 0, bottom);
-    float3 flip_axis = make_float3(1, 0, 0);
-    std::for_each(inv_xyz.begin(), inv_xyz.end(), [flip_center, flip_axis](float3& xyz) {
-        xyz = flip_center + Rodrigues(xyz - flip_center, flip_axis, 3.14159);
-    });
-    std::for_each(inv_quat.begin(), inv_quat.end(), [flip_axis](float4& Q) { Q = RotateQuat(Q, flip_axis, 3.14159); });
-    // inv_batch.SetPos(inv_xyz);
-    inv_batch.SetOriQ(inv_quat);
-
-    // Based on the `base_batch', we can create more batches. For example, another batch that is like copy-paste the
-    // existing batch, then shift up for a small distance.
-    float shift_dist = 0.15;
-    // First put the inv batch above the base batch
-    std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
-    inv_batch.SetPos(inv_xyz);
-    DEMSim.AddClumps(inv_batch);
 
     /////////
     // Add wheel in DEM
@@ -359,8 +362,8 @@ int main(int argc, char* argv[]) {
     auto max_v_finder = DEMSim.CreateInspector("clump_max_absv");
     auto max_z_finder = DEMSim.CreateInspector("clump_max_z");
     auto void_ratio_finder =
-        DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.45);");
-    float total_volume = 0.96 * 0.96 * 0.05;
+        DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.44);");
+    float total_volume = 0.96 * 0.96 * 0.06;
 
     // Now add a plane to compress the `road'
     auto compressor = DEMSim.AddExternalObject();
@@ -370,8 +373,7 @@ int main(int argc, char* argv[]) {
     DEMSim.DisableContactBetweenFamilies(90, 100); // no contact between compressor and wheels
     auto compressor_tracker = DEMSim.Track(compressor);
 
-    float base_step_size = 5e-7;
-    float step_size = base_step_size;
+    float step_size = 1e-6;
     float base_vel = 0.4;
     DEMSim.SetCoordSysOrigin(make_float3(world_x_size/3.*2., world_y_size/2., world_y_size/2.));
     DEMSim.SetInitTimeStep(step_size);
@@ -404,18 +406,18 @@ int main(int argc, char* argv[]) {
     unsigned int param_update_steps = (unsigned int)(1.0 / (param_update_freq * step_size));
 
     path out_dir = current_path();
-    out_dir += "/Viper_on_GRC";
+    out_dir += "/Viper_on_GRC_reduced";
     path rover_dir = out_dir / "./rover";
     create_directory(out_dir);
     create_directory(rover_dir);
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
 
-    step_size = 5e-7;
+    step_size = 1e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
     // Settle for a while...
-    for (float t = 0; t < 0.3; t += step_size, curr_step++) {
+    for (float t = 0; t < 1.0; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
              std::cout << "Frame: " << currframe << std::endl;
             DEMSim.ShowThreadCollaborationStats();
@@ -429,7 +431,7 @@ int main(int argc, char* argv[]) {
     }
     // Start compressing
     DEMSim.DoDynamicsThenSync(0);
-    step_size = 1e-6;
+    step_size = 2e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
 
@@ -469,7 +471,7 @@ int main(int argc, char* argv[]) {
 
     DEMSim.DisableContactBetweenFamilies(90, 0);
     DEMSim.DoDynamicsThenSync(0);
-    step_size = 5e-7;
+    step_size = 1e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
 
@@ -566,14 +568,14 @@ int main(int argc, char* argv[]) {
 
         if (t > 0.3 && change_step == 0) {
             DEMSim.DoDynamicsThenSync(0);
-            step_size = 1e-6;
+            step_size = 2e-6;
             DEMSim.SetInitTimeStep(step_size);
             DEMSim.SetMaxVelocity(20.0);
             DEMSim.UpdateSimParams();
             change_step = 1;
         } else if (t > 0.4 && change_step == 1) {
             DEMSim.DoDynamicsThenSync(0);
-            step_size = 2e-6;
+            step_size = 3e-6;
             DEMSim.SetInitTimeStep(step_size);
             DEMSim.SetMaxVelocity(15.0);
             DEMSim.UpdateSimParams();
