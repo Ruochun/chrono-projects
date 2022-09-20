@@ -427,6 +427,10 @@ int main(int argc, char* argv[]) {
         }
         DEMSim.DoDynamics(step_size);
     }
+
+    float matter_volume = void_ratio_finder->GetValue();
+    std::cout << "Void ratio before compression: " << (total_volume - matter_volume) / matter_volume << std::endl;
+
     // Start compressing
     DEMSim.DoDynamicsThenSync(0);
     step_size = 1e-6;
@@ -437,6 +441,7 @@ int main(int argc, char* argv[]) {
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
     double compressor_final_dist = 0.41-0.37;
+    std::cout << "Compressor is going to travel for " << compressor_final_dist << " meters" << std::endl;
     double compressor_v = compressor_final_dist / compress_time;
     for (float t = 0; t < compress_time; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
@@ -475,7 +480,7 @@ int main(int argc, char* argv[]) {
 
     DEMSim.EnableContactBetweenFamilies(100, 0); // Re-enable wheel-ground contact
 
-    float matter_volume = void_ratio_finder->GetValue();
+    matter_volume = void_ratio_finder->GetValue();
     std::cout << "Void ratio now: " << (total_volume - matter_volume) / matter_volume << std::endl;
     std::cout << "========================" << std::endl;
 

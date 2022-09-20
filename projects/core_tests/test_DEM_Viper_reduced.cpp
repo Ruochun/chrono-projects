@@ -417,7 +417,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
     // Settle for a while...
-    for (float t = 0; t < 1.0; t += step_size, curr_step++) {
+    for (float t = 0; t < 1.2; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
              std::cout << "Frame: " << currframe << std::endl;
             DEMSim.ShowThreadCollaborationStats();
@@ -429,16 +429,20 @@ int main(int argc, char* argv[]) {
         }
         DEMSim.DoDynamics(step_size);
     }
+    float matter_volume = void_ratio_finder->GetValue();
+    std::cout << "Void ratio before compression: " << (total_volume - matter_volume) / matter_volume << std::endl;
+
     // Start compressing
     DEMSim.DoDynamicsThenSync(0);
     step_size = 2e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
 
-    double now_z = -0.41;
+    double now_z = max_z_finder->GetValue();
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
-    double compressor_final_dist = 0.41-0.37;
+    double compressor_final_dist = (now_z > -0.41) ? now_z - (-0.41) : 0.0;
+    std::cout << "Compressor is going to travel for " << compressor_final_dist << " meters" << std::endl;
     double compressor_v = compressor_final_dist / compress_time;
     for (float t = 0; t < compress_time; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
@@ -477,7 +481,7 @@ int main(int argc, char* argv[]) {
 
     DEMSim.EnableContactBetweenFamilies(100, 0); // Re-enable wheel-ground contact
 
-    float matter_volume = void_ratio_finder->GetValue();
+    matter_volume = void_ratio_finder->GetValue();
     std::cout << "Void ratio now: " << (total_volume - matter_volume) / matter_volume << std::endl;
     std::cout << "========================" << std::endl;
 
