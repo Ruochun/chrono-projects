@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
     auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world
-    double world_x_size = 3.0*m_cm_cov;
+    double world_x_size = 4.0*m_cm_cov;
     double world_y_size = 2.0*m_cm_cov;
     DEMSim.InstructBoxDomainDimension(world_x_size, world_y_size, world_y_size);
     // DEMSim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
@@ -206,8 +206,8 @@ int main(int argc, char* argv[]) {
     DEMSim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
     DEMSim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
     // X-dir bounding planes
-    DEMSim.AddBCPlane(make_float3(-world_x_size / 3. * 2., 0, 0), make_float3(1, 0, 0), mat_type_terrain);
-    DEMSim.AddBCPlane(make_float3(world_x_size / 3., 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(-world_x_size / 2., 0, 0), make_float3(1, 0, 0), mat_type_terrain);
+    DEMSim.AddBCPlane(make_float3(world_x_size / 2., 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
 
     // Define the wheel geometry
     float wheel_rad = 0.25*m_cm_cov;
@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
 
     // Now we load part1 clump locations from a output file
     std::cout << "Making terrain..." << std::endl;
-    std::vector<float> x_shift_dist = {-1.5, -0.5, 0.5};
+    std::vector<float> x_shift_dist = {-1.5, -0.5, 0.5, 1.5};
     std::vector<float> y_shift_dist = {-0.5, 0.5};
 
     for (float x_shift : x_shift_dist) {
@@ -375,7 +375,7 @@ int main(int argc, char* argv[]) {
 
     float step_size = 1e-6;
     float base_vel = 0.4;
-    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/3.*2., world_y_size/2., world_y_size/2.));
+    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/2., world_y_size/2., world_y_size/2.));
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
@@ -397,9 +397,9 @@ int main(int argc, char* argv[]) {
     ///////////////////////////////////////////
 
     float time_end = 8.0;
-    unsigned int fps = 20;
-    unsigned int report_freq = 50000;
-    unsigned int param_update_freq = 50000;
+    unsigned int fps = 30;
+    unsigned int report_freq = 5000;
+    unsigned int param_update_freq = 5000;
     unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
     float frame_accu_thres = 1.0 / fps;
     unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));
@@ -429,19 +429,20 @@ int main(int argc, char* argv[]) {
         }
         DEMSim.DoDynamics(step_size);
     }
-    float matter_volume = void_ratio_finder->GetValue();
-    std::cout << "Void ratio before compression: " << (total_volume - matter_volume) / matter_volume << std::endl;
+    
 
     // Start compressing
     DEMSim.DoDynamicsThenSync(0);
     step_size = 2e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
+    float matter_volume = void_ratio_finder->GetValue();
+    std::cout << "Void ratio before compression: " << (total_volume - matter_volume) / matter_volume << std::endl;
 
-    double now_z = max_z_finder->GetValue();
+    double now_z = -0.38;
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
-    double compressor_final_dist = (now_z > -0.41) ? now_z - (-0.41) : 0.0;
+    double compressor_final_dist = (now_z > -0.43) ? now_z - (-0.43) : 0.0;
     std::cout << "Compressor is going to travel for " << compressor_final_dist << " meters" << std::endl;
     double compressor_v = compressor_final_dist / compress_time;
     for (float t = 0; t < compress_time; t += step_size, curr_step++) {
@@ -570,27 +571,26 @@ int main(int argc, char* argv[]) {
         //     std::cout << "Step size in simulation is " << step_size << std::endl;
         // }
 
-        if (t > 0.3 && change_step == 0) {
+        if (t > 1.0 && change_step == 0) {
             DEMSim.DoDynamicsThenSync(0);
             step_size = 2e-6;
             DEMSim.SetInitTimeStep(step_size);
-            DEMSim.SetMaxVelocity(20.0);
             DEMSim.UpdateSimParams();
             change_step = 1;
-        } else if (t > 0.4 && change_step == 1) {
+        } else if (t > 2.0 && change_step == 1) {
             DEMSim.DoDynamicsThenSync(0);
             step_size = 3e-6;
             DEMSim.SetInitTimeStep(step_size);
-            DEMSim.SetMaxVelocity(15.0);
             DEMSim.UpdateSimParams();
             change_step = 2;
-        } else if (t > 0.5 && change_step == 2) {
-            DEMSim.DoDynamicsThenSync(0);
-            step_size = 5e-6;
-            DEMSim.SetInitTimeStep(step_size);
-            DEMSim.UpdateSimParams();
-            change_step = 3;
-        }
+        } 
+        // else if (t > 3.0 && change_step == 2) {
+        //     DEMSim.DoDynamicsThenSync(0);
+        //     step_size = 5e-6;
+        //     DEMSim.SetInitTimeStep(step_size);
+        //     DEMSim.UpdateSimParams();
+        //     change_step = 3;
+        // }
 
         if (curr_step % report_steps == 0) {
             float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());

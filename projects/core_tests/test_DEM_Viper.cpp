@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
-    viper.Initialize(ChFrame<>(ChVector<>(-0.75, -0.0, -0.17), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.9, -0.0, -0.17), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
     float base_step_size = 5e-7;
     float step_size = base_step_size;
     float base_vel = 0.4;
-    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/3.*2., world_y_size/2., world_y_size/2.));
+    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/2., world_y_size/2., world_y_size/2.));
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
@@ -395,9 +395,9 @@ int main(int argc, char* argv[]) {
     ///////////////////////////////////////////
 
     float time_end = 8.0;
-    unsigned int fps = 20;
-    unsigned int report_freq = 50000;
-    unsigned int param_update_freq = 50000;
+    unsigned int fps = 30;
+    unsigned int report_freq = 5000;
+    unsigned int param_update_freq = 5000;
     unsigned int out_steps = (unsigned int)(1.0 / (fps * step_size));
     float frame_accu_thres = 1.0 / fps;
     unsigned int report_steps = (unsigned int)(1.0 / (report_freq * step_size));
@@ -414,8 +414,9 @@ int main(int argc, char* argv[]) {
     step_size = 5e-7;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
+    bool change_in_settle = false;
     // Settle for a while...
-    for (float t = 0; t < 0.3; t += step_size, curr_step++) {
+    for (float t = 0; t < 0.6; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
              std::cout << "Frame: " << currframe << std::endl;
             DEMSim.ShowThreadCollaborationStats();
@@ -426,6 +427,13 @@ int main(int argc, char* argv[]) {
             currframe++;
         }
         DEMSim.DoDynamics(step_size);
+        if (t>0.2 && !change_in_settle) {
+            DEMSim.DoDynamicsThenSync(0);
+            step_size = 1e-6;
+            DEMSim.SetInitTimeStep(step_size);
+            DEMSim.UpdateSimParams();
+            change_in_settle = true;
+        }  
     }
 
     float matter_volume = void_ratio_finder->GetValue();
@@ -437,7 +445,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
 
-    double now_z = -0.41;
+    double now_z = -0.42;
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
     double compressor_final_dist = 0.41-0.37;
@@ -573,23 +581,24 @@ int main(int argc, char* argv[]) {
             DEMSim.DoDynamicsThenSync(0);
             step_size = 1e-6;
             DEMSim.SetInitTimeStep(step_size);
-            DEMSim.SetMaxVelocity(20.0);
+            // DEMSim.SetMaxVelocity(20.0);
             DEMSim.UpdateSimParams();
             change_step = 1;
-        } else if (t > 0.4 && change_step == 1) {
+        } else if (t > 0.5 && change_step == 1) {
             DEMSim.DoDynamicsThenSync(0);
             step_size = 2e-6;
             DEMSim.SetInitTimeStep(step_size);
-            DEMSim.SetMaxVelocity(15.0);
+            // DEMSim.SetMaxVelocity(15.0);
             DEMSim.UpdateSimParams();
             change_step = 2;
-        } else if (t > 0.5 && change_step == 2) {
-            DEMSim.DoDynamicsThenSync(0);
-            step_size = 5e-6;
-            DEMSim.SetInitTimeStep(step_size);
-            DEMSim.UpdateSimParams();
-            change_step = 3;
-        }
+        } 
+        // else if (t > 0.5 && change_step == 2) {
+        //     DEMSim.DoDynamicsThenSync(0);
+        //     step_size = 5e-6;
+        //     DEMSim.SetInitTimeStep(step_size);
+        //     DEMSim.UpdateSimParams();
+        //     change_step = 3;
+        // }
 
         if (curr_step % report_steps == 0) {
             float3 body_pos = ChVec2Float(Body_1->GetFrame_REF_to_abs().GetPos());
