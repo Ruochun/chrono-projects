@@ -345,7 +345,8 @@ int main(int argc, char* argv[]) {
     
     // Instantiate this wheel
     std::cout << "Making wheels..." << std::endl;
-    DEMSim.SetFamilyFixed(100);
+    DEMSim.SetFamilyPrescribedAngVel(100);
+    DEMSim.SetFamilyPrescribedLinVel(100);
     std::vector<std::shared_ptr<DEMTracker>> trackers;
     std::vector<std::shared_ptr<DEMClumpBatch>> DEM_Wheels;
     for (int i = 0; i < nW; i++) {
@@ -417,7 +418,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
     // Settle for a while...
-    for (float t = 0; t < 1.2; t += step_size, curr_step++) {
+    for (float t = 0; t < 1.5; t += step_size, curr_step++) {
         if (curr_step % out_steps == 0) {
              std::cout << "Frame: " << currframe << std::endl;
             DEMSim.ShowThreadCollaborationStats();
@@ -433,7 +434,7 @@ int main(int argc, char* argv[]) {
 
     // Start compressing
     DEMSim.DoDynamicsThenSync(0);
-    step_size = 2e-6;
+    step_size = 1e-6;
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
     float matter_volume = void_ratio_finder->GetValue();
@@ -442,7 +443,7 @@ int main(int argc, char* argv[]) {
     double now_z = -0.38;
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
-    double compressor_final_dist = (now_z > -0.43) ? now_z - (-0.43) : 0.0;
+    double compressor_final_dist = (now_z > -0.42) ? now_z - (-0.42) : 0.0;
     std::cout << "Compressor is going to travel for " << compressor_final_dist << " meters" << std::endl;
     double compressor_v = compressor_final_dist / compress_time;
     for (float t = 0; t < compress_time; t += step_size, curr_step++) {
@@ -498,6 +499,8 @@ int main(int argc, char* argv[]) {
     d_total = std::chrono::duration<double>(0);
 
     std::vector<ChQuaternion<>> wheel_rot(4);
+    std::vector<ChVector<>> wheel_vel(4);
+    std::vector<ChVector<>> wheel_angVel(4);
     float max_v;
     int change_step = 0;
     float frame_accu = frame_accu_thres;
@@ -505,22 +508,9 @@ int main(int argc, char* argv[]) {
     // Find max z
     // float init_max_z = 
     // 0.268923
+    unsigned int chrono_update_freq = 20;
     for (float t = 0; t < time_end; t += step_size, curr_step++, frame_accu += step_size) {
-        for (int i = 0; i < nW; i++) {
-            wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
-            trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
-            wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
-            trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
-            
-            if (curr_step % report_steps == 0) {
-                
-                std::cout << "Wheel " << i << " position: " << wheel_pos[i].x() << ", " 
-                      << wheel_pos[i].y() << ", " << wheel_pos[i].z() << std::endl;
-                
-                std::cout << "Wheel " << i << " rotation: " << wheel_rot[i].e0() << ", " 
-                      << wheel_rot[i].e1() << ", " << wheel_rot[i].e2() << ", " << wheel_rot[i].e3() << std::endl;
-            }
-        }
+        
 
         // if (curr_step % out_steps == 0) {
         if (frame_accu >= frame_accu_thres) {
@@ -539,21 +529,48 @@ int main(int argc, char* argv[]) {
         d_end = std::chrono::high_resolution_clock::now();
         d_total += d_end - d_start;
 
-        // Then feed force
-        for (int i = 0; i < nW; i++) {
-            float3 F = trackers[i]->ContactAcc();
-            F *= wheel_mass;
-            float3 tor = trackers[i]->ContactAngAccLocal();
-            tor = wheel_MOI * tor;
-            Wheels[i]->Empty_forces_accumulators();
-            Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
-            Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in SMUG is local
+        if (curr_step % chrono_update_freq == 0) {
+            for (int i = 0; i < nW; i++) {
+                wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
+                trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
+                wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
+                trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
+                wheel_vel[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos_dt();
+                trackers[i]->SetVel(ChVec2Float(wheel_vel[i]));
+                wheel_angVel[i] = Wheels[i]->GetFrame_REF_to_abs().GetWvel_par();
+                trackers[i]->SetAngVel(ChVec2Float(wheel_angVel[i]));  
+            }
         }
-        h_start = std::chrono::high_resolution_clock::now();
-        sys.DoStepDynamics(step_size);
-        viper.Update();
-        h_end = std::chrono::high_resolution_clock::now();
-        h_total += h_end - h_start;
+        if (curr_step % report_steps == 0) {
+            for (int i = 0; i < nW; i++) {
+                std::cout << "Wheel " << i << " position: " << wheel_pos[i].x() << ", " 
+                        << wheel_pos[i].y() << ", " << wheel_pos[i].z() << std::endl;
+                
+                std::cout << "Wheel " << i << " rotation: " << wheel_rot[i].e0() << ", " 
+                        << wheel_rot[i].e1() << ", " << wheel_rot[i].e2() << ", " << wheel_rot[i].e3() << std::endl;
+
+                std::cout << "Wheel " << i << " angVel: " << wheel_angVel[i].x() << ", " 
+                        << wheel_angVel[i].y() << ", " << wheel_angVel[i].z() << std::endl;
+            }
+        }
+
+        // Then feed force
+        if (curr_step % chrono_update_freq == 0) {
+            for (int i = 0; i < nW; i++) {
+                float3 F = trackers[i]->ContactAcc();
+                F *= wheel_mass;
+                float3 tor = trackers[i]->ContactAngAccLocal();
+                tor = wheel_MOI * tor;
+                Wheels[i]->Empty_forces_accumulators();
+                Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
+                Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in DEME is local
+            }
+            h_start = std::chrono::high_resolution_clock::now();
+            sys.DoStepDynamics(step_size * chrono_update_freq);
+            viper.Update();
+            h_end = std::chrono::high_resolution_clock::now();
+            h_total += h_end - h_start;
+        }
 
         t += step_size;
         frame_accu += step_size;
