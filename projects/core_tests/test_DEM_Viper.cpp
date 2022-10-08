@@ -378,7 +378,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
-    DEMSim.SetCDUpdateFreq(10);
+    DEMSim.SetCDUpdateFreq(15);
     // DEMSim.SetExpandFactor(1e-3);
     DEMSim.SetMaxVelocity(35.0);
     DEMSim.SetExpandSafetyParam(1.1);
@@ -395,7 +395,7 @@ int main(int argc, char* argv[]) {
     // Compress the road first
     ///////////////////////////////////////////
 
-    float time_end = 8.0;
+    float time_end = 6.0;
     unsigned int fps = 30;
     unsigned int report_freq = 5000;
     unsigned int param_update_freq = 5000;
@@ -440,7 +440,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.UpdateSimParams();
 
-    double now_z = -0.42;
+    double now_z = -0.37;
     compressor_tracker->SetPos(make_float3(0, 0, now_z));
     float compress_time = 0.3;
     double compressor_final_dist = 0.41-0.37;

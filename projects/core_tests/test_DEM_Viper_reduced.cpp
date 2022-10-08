@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
     
-    viper.Initialize(ChFrame<>(ChVector<>(-0.75, -0.0, -0.13), QUNIT));
+    viper.Initialize(ChFrame<>(ChVector<>(-0.9, -0.0, -0.13), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -380,7 +380,7 @@ int main(int argc, char* argv[]) {
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
-    DEMSim.SetCDUpdateFreq(10);
+    DEMSim.SetCDUpdateFreq(15);
     // DEMSim.SetExpandFactor(1e-3);
     DEMSim.SetMaxVelocity(35.0);
     DEMSim.SetExpandSafetyParam(1.1);
