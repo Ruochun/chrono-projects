@@ -18,8 +18,8 @@
 
 #include "chrono_models/robot/viper/Viper.h"
 
-#include "chrono/physics/ChSystemSMC.h"
 #include "chrono/physics/ChBodyEasy.h"
+#include "chrono/physics/ChSystemSMC.h"
 #include "chrono/utils/ChUtilsInputOutput.h"
 
 #include "chrono_vehicle/ChVehicleModelData.h"
@@ -32,12 +32,12 @@
 #include <DEM/HostSideHelpers.hpp>
 #include <DEM/utils/Samplers.hpp>
 
-#include <cstdio>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <map>
 #include <random>
-#include <cmath>
 
 using namespace deme;
 using namespace std::filesystem;
@@ -122,7 +122,6 @@ std::shared_ptr<ChMaterialSurface> CustomWheelMaterial(ChContactMethod contact_m
 }
 
 int main(int argc, char* argv[]) {
-
     GetLog() << "Copyright (c) 2017 projectchrono.org\nChrono version: " << CHRONO_VERSION << "\n\n";
 
     auto vis_mesh_file = GetChronoDataFile(".");
@@ -138,11 +137,11 @@ int main(int argc, char* argv[]) {
     ChVector<double> G = ChVector<double>(0, 0, -9.81);
     sys.Set_G_acc(G);
 
-    const int nW = 4; // 4 wheels
+    const int nW = 4;  // 4 wheels
 
     // Create the rover
     // auto driver = chrono_types::make_shared<ViperDCMotorControl>();
-    auto driver = chrono_types::make_shared<ViperSpeedDriver>(0, 3.14159/2);
+    auto driver = chrono_types::make_shared<ViperSpeedDriver>(0, 3.14159 / 2);
 
     Viper viper(&sys, wheel_type);
 
@@ -150,7 +149,7 @@ int main(int argc, char* argv[]) {
     viper.SetDriver(driver);
     if (use_custom_mat)
         viper.SetWheelContactMaterial(CustomWheelMaterial(ChContactMethod::NSC));
-    
+
     // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LF);
     // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_RF);
     // driver->SetMotorNoLoadSpeed(0.8, ViperWheelID::V_LB);
@@ -159,8 +158,8 @@ int main(int argc, char* argv[]) {
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RF);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_LB);
     // driver->SetMotorStallTorque(50.0, ViperWheelID::V_RB);
-    
-    viper.Initialize(ChFrame<>(ChVector<>(-0.9, -0.0, -0.13), QUNIT));
+
+    viper.Initialize(ChFrame<>(ChVector<>(-0.9, -0.0, -0.00), QUNIT));
 
     // Get wheels and bodies to set up SCM patches
     std::vector<std::shared_ptr<ChBodyAuxRef>> Wheels;
@@ -169,7 +168,7 @@ int main(int argc, char* argv[]) {
     Wheels.push_back(viper.GetWheel(ViperWheelID::V_RF)->GetBody());
     Wheels.push_back(viper.GetWheel(ViperWheelID::V_LB)->GetBody());
     Wheels.push_back(viper.GetWheel(ViperWheelID::V_RB)->GetBody());
-    
+
     auto Body_1 = viper.GetChassis()->GetBody();
     double total_mass = viper.GetRoverMass();
     double wheel_mass = viper.GetWheelMass();
@@ -193,15 +192,17 @@ int main(int argc, char* argv[]) {
     float kg_g_conv = 1;
     float m_cm_cov = 1;
     // Define materials
-    auto mat_type_terrain = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
-    auto mat_type_wheel = DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv/m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_terrain =
+        DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv / m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
+    auto mat_type_wheel =
+        DEMSim.LoadMaterial({{"E", 1e9 * kg_g_conv / m_cm_cov}, {"nu", 0.3}, {"CoR", 0.3}, {"mu", 0.5}, {"Crr", 0.0}});
 
     // Define the simulation world
-    double world_x_size = 4.0*m_cm_cov;
-    double world_y_size = 2.0*m_cm_cov;
+    double world_x_size = 4.0 * m_cm_cov;
+    double world_y_size = 2.0 * m_cm_cov;
     DEMSim.InstructBoxDomainDimension(world_x_size, world_y_size, world_y_size);
     // DEMSim.InstructBoxDomainNumVoxel(22, 21, 21, (world_y_size) / std::pow(2, 16) / std::pow(2, 21));
-    float bottom = -0.5*m_cm_cov;
+    float bottom = -0.5 * m_cm_cov;
     DEMSim.AddBCPlane(make_float3(0, 0, bottom), make_float3(0, 0, 1), mat_type_terrain);
     DEMSim.AddBCPlane(make_float3(0, world_y_size / 2, 0), make_float3(0, -1, 0), mat_type_terrain);
     DEMSim.AddBCPlane(make_float3(0, -world_y_size / 2, 0), make_float3(0, 1, 0), mat_type_terrain);
@@ -210,18 +211,19 @@ int main(int argc, char* argv[]) {
     DEMSim.AddBCPlane(make_float3(world_x_size / 2., 0, 0), make_float3(-1, 0, 0), mat_type_terrain);
 
     // Define the wheel geometry
-    float wheel_rad = 0.25*m_cm_cov;
-    float wheel_width = 0.25*m_cm_cov;
+    float wheel_rad = 0.25 * m_cm_cov;
+    float wheel_width = 0.25 * m_cm_cov;
     wheel_mass *= kg_g_conv;  // in kg or g
     // Our shelf wheel geometry is lying flat on ground with z being the axial direction
     float wheel_IYY = wheel_mass * wheel_rad * wheel_rad / 2;
     float wheel_IXX = (wheel_mass / 12) * (3 * wheel_rad * wheel_rad + wheel_width * wheel_width);
     float3 wheel_MOI = make_float3(wheel_IXX, wheel_IYY, wheel_IXX);
-    auto wheel_template = DEMSim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
+    auto wheel_template =
+        DEMSim.LoadClumpType(wheel_mass, wheel_MOI, "../data/clumps/ViperWheelSimple.csv", mat_type_wheel);
     // The file contains no wheel particles size info, so let's manually set them
-    wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01*m_cm_cov);
-    // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll 
-    // along X direction. Let's make it clear its principal axes is not what we used to report its component 
+    wheel_template->radii = std::vector<float>(wheel_template->nComp, 0.01 * m_cm_cov);
+    // This wheel template is `lying down', but our reported MOI info is assuming it's in a position to roll
+    // along X direction. Let's make it clear its principal axes is not what we used to report its component
     // sphere relative positions.
     wheel_template->InformCentroidPrincipal(make_float3(0), make_float4(0.7071, 0, 0, 0.7071));
 
@@ -230,12 +232,13 @@ int main(int argc, char* argv[]) {
     shape_template.ReadComponentFromFile("../data/clumps/triangular_flat.csv");
     // Calculate its mass and MOI
     float mass = 2.6e3 * 5.5886717 * kg_g_conv;  // in kg or g
-    float3 MOI = make_float3(1.8327927, 2.1580013, 0.77010059) * (double)2.6e3 * kg_g_conv/m_cm_cov/m_cm_cov;
+    float clump_vol = 5.5886717;
+    float3 MOI = make_float3(1.8327927, 2.1580013, 0.77010059) * (double)2.6e3 * kg_g_conv / m_cm_cov / m_cm_cov;
     std::for_each(shape_template.radii.begin(), shape_template.radii.end(), [m_cm_cov](float& r) { r *= m_cm_cov; });
     std::for_each(shape_template.relPos.begin(), shape_template.relPos.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
     // Scale the template we just created
     std::vector<std::shared_ptr<DEMClumpTemplate>> ground_particle_templates;
-    std::vector<double> scales = {0.0010, 0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
+    std::vector<double> scales = {0.00063, 0.00033, 0.00022, 0.00015, 0.00009};
     std::for_each(scales.begin(), scales.end(), [](double& r) { r *= 20.; });
     for (double scaling : scales) {
         auto this_template = shape_template;
@@ -251,6 +254,7 @@ int main(int argc, char* argv[]) {
         std::for_each(this_template.radii.begin(), this_template.radii.end(), [scaling](float& r) { r *= scaling; });
         std::for_each(this_template.relPos.begin(), this_template.relPos.end(), [scaling](float3& r) { r *= scaling; });
         this_template.materials = std::vector<std::shared_ptr<DEMMaterial>>(this_template.nComp, mat_type_terrain);
+        this_template.SetVolume((double)clump_vol * scaling * scaling * scaling);
         ground_particle_templates.push_back(DEMSim.LoadClumpType(this_template));
     }
 
@@ -261,15 +265,13 @@ int main(int argc, char* argv[]) {
 
     for (float x_shift : x_shift_dist) {
         for (float y_shift : y_shift_dist) {
-            auto part1_clump_xyz = DEMSim.ReadClumpXyzFromCsv("./GRC_2e5_reduced.csv");
-            auto part1_clump_quaternion = DEMSim.ReadClumpQuatFromCsv("./GRC_2e5_reduced.csv");
+            auto part1_clump_xyz = DEMSim.ReadClumpXyzFromCsv("./GRC_3e6.csv");
+            auto part1_clump_quaternion = DEMSim.ReadClumpQuatFromCsv("./GRC_3e6.csv");
             std::vector<float3> in_xyz;
             std::vector<float4> in_quat;
             std::vector<std::shared_ptr<DEMClumpTemplate>> in_types;
             unsigned int t_num = 0;
             for (int i = 0; i < scales.size(); i++) {
-                // Our template names are 0001, 0002 etc.
-                t_num++;
                 char t_name[20];
                 sprintf(t_name, "%04d", t_num);
 
@@ -277,11 +279,12 @@ int main(int argc, char* argv[]) {
                 auto this_type_quat = part1_clump_quaternion[std::string(t_name)];
 
                 size_t n_clump_this_type = this_type_xyz.size();
-                std::cout << "Loading clump " << std::string(t_name) << " which has particle num: " << n_clump_this_type << std::endl;
+                std::cout << "Loading clump " << std::string(t_name) << " which has particle num: " << n_clump_this_type
+                          << std::endl;
                 // Prepare clump type identification vector for loading into the system (don't forget type 0 in
                 // ground_particle_templates is the template for rover wheel)
                 std::vector<std::shared_ptr<DEMClumpTemplate>> this_type(n_clump_this_type,
-                                                                        ground_particle_templates.at(t_num - 1));
+                                                                         ground_particle_templates.at(t_num));
 
                 // Add them to the big long vector
                 std::for_each(this_type_xyz.begin(), this_type_xyz.end(), [m_cm_cov](float3& r) { r *= m_cm_cov; });
@@ -289,6 +292,9 @@ int main(int argc, char* argv[]) {
                 in_quat.insert(in_quat.end(), this_type_quat.begin(), this_type_quat.end());
                 in_types.insert(in_types.end(), this_type.begin(), this_type.end());
                 std::cout << "Added clump type " << t_num << std::endl;
+
+                // Our template names are 0000, 0001 etc.
+                t_num++;
             }
 
             // Now, apply x_ and y-shifts
@@ -304,45 +310,13 @@ int main(int argc, char* argv[]) {
             base_batch.SetOriQ(in_quat);
 
             DEMSim.AddClumps(base_batch);
-
-            // I also would like an `inverse batch', which is a batch of clumps that is the base batch flipped around
-            DEMClumpBatch inv_batch = base_batch;
-            std::vector<float3> inv_xyz = in_xyz;
-            std::vector<float4> inv_quat = in_quat;
-            float3 flip_center = make_float3(x_shift, y_shift, bottom);
-            float3 flip_axis = make_float3(1, 0, 0);
-            std::for_each(inv_xyz.begin(), inv_xyz.end(), [flip_center, flip_axis](float3& xyz) {
-                xyz = flip_center + Rodrigues(xyz - flip_center, flip_axis, 3.14159);
-            });
-            std::for_each(inv_quat.begin(), inv_quat.end(), [flip_axis](float4& Q) { Q = RotateQuat(Q, flip_axis, 3.14159); });
-            // inv_batch.SetPos(inv_xyz);
-            inv_batch.SetOriQ(inv_quat);
-
-            // Based on the `base_batch', we can create more batches. For example, another batch that is like copy-paste the
-            // existing batch, then shift up for a small distance.
-            float shift_dist = 0.15;
-            // First put the inv batch above the base batch
-            std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist / 2.0; });
-            inv_batch.SetPos(inv_xyz);
-            DEMSim.AddClumps(inv_batch);
-            // Add another 4 layers of such graular bed
-            for (int i = 0; i < 2; i++) {
-                DEMClumpBatch another_batch = base_batch;
-                std::for_each(in_xyz.begin(), in_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
-                another_batch.SetPos(in_xyz);
-                DEMSim.AddClumps(another_batch);
-                DEMClumpBatch another_inv_batch = inv_batch;
-                std::for_each(inv_xyz.begin(), inv_xyz.end(), [shift_dist](float3& xyz) { xyz.z += shift_dist; });
-                another_inv_batch.SetPos(inv_xyz);
-                DEMSim.AddClumps(another_inv_batch);
-            }
         }
     }
 
     /////////
     // Add wheel in DEM
     //////////
-    
+
     // Instantiate this wheel
     std::cout << "Making wheels..." << std::endl;
     DEMSim.SetFamilyPrescribedAngVel(100);
@@ -350,12 +324,12 @@ int main(int argc, char* argv[]) {
     std::vector<std::shared_ptr<DEMTracker>> trackers;
     std::vector<std::shared_ptr<DEMClumpBatch>> DEM_Wheels;
     for (int i = 0; i < nW; i++) {
-        DEM_Wheels.push_back(DEMSim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
+        DEM_Wheels.push_back(
+            DEMSim.AddClumps(wheel_template, make_float3(wheel_pos[i].x(), wheel_pos[i].y(), wheel_pos[i].z())));
         DEM_Wheels[i]->SetFamily(100);
         trackers.push_back(DEMSim.Track(DEM_Wheels[i]));
     }
-    DEMSim.DisableFamilyOutput(100); // no need outputting wheels
-    DEMSim.DisableContactBetweenFamilies(100, 0); // No wheel-ground contact while settling
+    DEMSim.DisableFamilyOutput(100);  // no need outputting wheels
 
     //////
     // Make ready for DEM simulation
@@ -366,27 +340,19 @@ int main(int argc, char* argv[]) {
         DEMSim.CreateInspector("clump_volume", "return (abs(X) <= 0.48) && (abs(Y) <= 0.48) && (Z <= -0.44);");
     float total_volume = 0.96 * 0.96 * 0.06;
 
-    // Now add a plane to compress the `road'
-    auto compressor = DEMSim.AddExternalObject();
-    compressor->AddPlane(make_float3(0, 0, 0), make_float3(0, 0, -1), mat_type_terrain);
-    compressor->SetFamily(90);
-    DEMSim.SetFamilyFixed(90);
-    DEMSim.DisableContactBetweenFamilies(90, 100); // no contact between compressor and wheels
-    auto compressor_tracker = DEMSim.Track(compressor);
-
     float step_size = 1e-6;
     float base_vel = 0.4;
-    DEMSim.SetCoordSysOrigin(make_float3(world_x_size/2., world_y_size/2., world_y_size/2.));
+    DEMSim.SetCoordSysOrigin(make_float3(world_x_size / 2., world_y_size / 2., world_y_size / 2.));
     DEMSim.SetInitTimeStep(step_size);
     DEMSim.SetGravitationalAcceleration(ChVec2Float(G));
     // If you want to use a large UpdateFreq then you have to expand spheres to ensure safety
-    DEMSim.SetCDUpdateFreq(15);
+    DEMSim.SetCDUpdateFreq(25);
     // DEMSim.SetExpandFactor(1e-3);
     DEMSim.SetMaxVelocity(35.0);
     DEMSim.SetExpandSafetyParam(1.1);
     DEMSim.SetInitBinSize(scales.at(2));
     DEMSim.SetIntegrator(TIME_INTEGRATOR::EXTENDED_TAYLOR);
-    
+
     DEMSim.Initialize();
     for (const auto& tracker : trackers) {
         std::cout << "A tracker is tracking owner " << tracker->obj->ownerID << std::endl;
@@ -397,7 +363,7 @@ int main(int argc, char* argv[]) {
     // Compress the road first
     ///////////////////////////////////////////
 
-    float time_end = 8.0;
+    float time_end = 5.0;
     unsigned int fps = 30;
     unsigned int report_freq = 5000;
     unsigned int param_update_freq = 5000;
@@ -414,76 +380,7 @@ int main(int argc, char* argv[]) {
     unsigned int currframe = 0;
     unsigned int curr_step = 0;
 
-    step_size = 1e-6;
-    DEMSim.SetInitTimeStep(step_size);
-    DEMSim.UpdateSimParams();
-    // Settle for a while...
-    for (float t = 0; t < 1.5; t += step_size, curr_step++) {
-        if (curr_step % out_steps == 0) {
-             std::cout << "Frame: " << currframe << std::endl;
-            DEMSim.ShowThreadCollaborationStats();
-            char filename[200];
-            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
-            DEMSim.WriteSphereFile(std::string(filename));
-            SaveParaViewFiles(viper, rover_dir, currframe);
-            currframe++;
-        }
-        DEMSim.DoDynamics(step_size);
-    }
-    
-
-    // Start compressing
-    DEMSim.DoDynamicsThenSync(0);
-    step_size = 1e-6;
-    DEMSim.SetInitTimeStep(step_size);
-    DEMSim.UpdateSimParams();
     float matter_volume = void_ratio_finder->GetValue();
-    std::cout << "Void ratio before compression: " << (total_volume - matter_volume) / matter_volume << std::endl;
-
-    double now_z = -0.38;
-    compressor_tracker->SetPos(make_float3(0, 0, now_z));
-    float compress_time = 0.3;
-    double compressor_final_dist = (now_z > -0.42) ? now_z - (-0.42) : 0.0;
-    std::cout << "Compressor is going to travel for " << compressor_final_dist << " meters" << std::endl;
-    double compressor_v = compressor_final_dist / compress_time;
-    for (float t = 0; t < compress_time; t += step_size, curr_step++) {
-        if (curr_step % out_steps == 0) {
-             std::cout << "Frame: " << currframe << std::endl;
-            DEMSim.ShowThreadCollaborationStats();
-            char filename[200];
-            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
-            DEMSim.WriteSphereFile(std::string(filename));
-            SaveParaViewFiles(viper, rover_dir, currframe);
-            currframe++;
-        }
-        now_z -= compressor_v * step_size;
-        compressor_tracker->SetPos(make_float3(0, 0, now_z));
-        DEMSim.DoDynamics(step_size);
-    }
-    for (float t = 0; t < compress_time; t += step_size, curr_step++) {
-        if (curr_step % out_steps == 0) {
-             std::cout << "Frame: " << currframe << std::endl;
-            DEMSim.ShowThreadCollaborationStats();
-            char filename[200];
-            sprintf(filename, "%s/DEMdemo_output_%04d.csv", out_dir.c_str(), currframe);
-            DEMSim.WriteSphereFile(std::string(filename));
-            SaveParaViewFiles(viper, rover_dir, currframe);
-            currframe++;
-        }
-        now_z += compressor_v * step_size;
-        compressor_tracker->SetPos(make_float3(0, 0, now_z));
-        DEMSim.DoDynamics(step_size);
-    }
-
-    DEMSim.DisableContactBetweenFamilies(90, 0);
-    DEMSim.DoDynamicsThenSync(0);
-    step_size = 1e-6;
-    DEMSim.SetInitTimeStep(step_size);
-    DEMSim.UpdateSimParams();
-
-    DEMSim.EnableContactBetweenFamilies(100, 0); // Re-enable wheel-ground contact
-
-    matter_volume = void_ratio_finder->GetValue();
     std::cout << "Void ratio now: " << (total_volume - matter_volume) / matter_volume << std::endl;
     std::cout << "========================" << std::endl;
 
@@ -491,7 +388,7 @@ int main(int argc, char* argv[]) {
     // Real simulation
     ///////////////////////////////////////////
 
-    // Timers 
+    // Timers
     std::chrono::high_resolution_clock::time_point h_start, d_start;
     std::chrono::high_resolution_clock::time_point h_end, d_end;
     std::chrono::duration<double> h_total, d_total;
@@ -505,12 +402,43 @@ int main(int argc, char* argv[]) {
     int change_step = 0;
     float frame_accu = frame_accu_thres;
 
-    // Find max z
-    // float init_max_z = 
-    // 0.268923
-    unsigned int chrono_update_freq = 20;
+    for (int i = 0; i < nW; i++) {
+        wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
+        trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
+        wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
+        trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
+        wheel_vel[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos_dt();
+        trackers[i]->SetVel(ChVec2Float(wheel_vel[i]));
+        wheel_angVel[i] = Wheels[i]->GetFrame_REF_to_abs().GetWvel_par();
+        trackers[i]->SetAngVel(ChVec2Float(wheel_angVel[i]));
+    }
+
+    unsigned int chrono_update_freq = 10;
     for (float t = 0; t < time_end; t += step_size, curr_step++, frame_accu += step_size) {
-        
+        if (curr_step % chrono_update_freq == 0) {
+            for (int i = 0; i < nW; i++) {
+                wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
+                trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
+                wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
+                trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
+                wheel_vel[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos_dt();
+                trackers[i]->SetVel(ChVec2Float(wheel_vel[i]));
+                wheel_angVel[i] = Wheels[i]->GetFrame_REF_to_abs().GetWvel_par();
+                trackers[i]->SetAngVel(ChVec2Float(wheel_angVel[i]));
+            }
+        }
+        if (curr_step % report_steps == 0) {
+            for (int i = 0; i < nW; i++) {
+                std::cout << "Wheel " << i << " position: " << wheel_pos[i].x() << ", " << wheel_pos[i].y() << ", "
+                          << wheel_pos[i].z() << std::endl;
+
+                std::cout << "Wheel " << i << " rotation: " << wheel_rot[i].e0() << ", " << wheel_rot[i].e1() << ", "
+                          << wheel_rot[i].e2() << ", " << wheel_rot[i].e3() << std::endl;
+
+                std::cout << "Wheel " << i << " angVel: " << wheel_angVel[i].x() << ", " << wheel_angVel[i].y() << ", "
+                          << wheel_angVel[i].z() << std::endl;
+            }
+        }
 
         // if (curr_step % out_steps == 0) {
         if (frame_accu >= frame_accu_thres) {
@@ -529,31 +457,6 @@ int main(int argc, char* argv[]) {
         d_end = std::chrono::high_resolution_clock::now();
         d_total += d_end - d_start;
 
-        if (curr_step % chrono_update_freq == 0) {
-            for (int i = 0; i < nW; i++) {
-                wheel_pos[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos();
-                trackers[i]->SetPos(ChVec2Float(wheel_pos[i]));
-                wheel_rot[i] = Wheels[i]->GetFrame_REF_to_abs().GetRot();
-                trackers[i]->SetOriQ(ChQ2Float(wheel_rot[i]));
-                wheel_vel[i] = Wheels[i]->GetFrame_REF_to_abs().GetPos_dt();
-                trackers[i]->SetVel(ChVec2Float(wheel_vel[i]));
-                wheel_angVel[i] = Wheels[i]->GetFrame_REF_to_abs().GetWvel_par();
-                trackers[i]->SetAngVel(ChVec2Float(wheel_angVel[i]));  
-            }
-        }
-        if (curr_step % report_steps == 0) {
-            for (int i = 0; i < nW; i++) {
-                std::cout << "Wheel " << i << " position: " << wheel_pos[i].x() << ", " 
-                        << wheel_pos[i].y() << ", " << wheel_pos[i].z() << std::endl;
-                
-                std::cout << "Wheel " << i << " rotation: " << wheel_rot[i].e0() << ", " 
-                        << wheel_rot[i].e1() << ", " << wheel_rot[i].e2() << ", " << wheel_rot[i].e3() << std::endl;
-
-                std::cout << "Wheel " << i << " angVel: " << wheel_angVel[i].x() << ", " 
-                        << wheel_angVel[i].y() << ", " << wheel_angVel[i].z() << std::endl;
-            }
-        }
-
         // Then feed force
         if (curr_step % chrono_update_freq == 0) {
             for (int i = 0; i < nW; i++) {
@@ -563,7 +466,7 @@ int main(int argc, char* argv[]) {
                 tor = wheel_MOI * tor;
                 Wheels[i]->Empty_forces_accumulators();
                 Wheels[i]->Accumulate_force(Float2ChVec(F), wheel_pos[i], false);
-                Wheels[i]->Accumulate_torque(Float2ChVec(tor), true); // torque in DEME is local
+                Wheels[i]->Accumulate_torque(Float2ChVec(tor), true);  // torque in DEME is local
             }
             h_start = std::chrono::high_resolution_clock::now();
             sys.DoStepDynamics(step_size * chrono_update_freq);
@@ -590,17 +493,22 @@ int main(int argc, char* argv[]) {
 
         if (t > 1.0 && change_step == 0) {
             DEMSim.DoDynamicsThenSync(0);
-            step_size = 2e-6;
+            step_size = 1.5e-6;
             DEMSim.SetInitTimeStep(step_size);
+            DEMSim.SetMaxVelocity(30.0);
             DEMSim.UpdateSimParams();
             change_step = 1;
-        } else if (t > 2.0 && change_step == 1) {
-            DEMSim.DoDynamicsThenSync(0);
+        }
+        /*
+        else if (t > 2.0 && change_step == 1) {
+           DEMSim.DoDynamicsThenSync(0);
             step_size = 3e-6;
             DEMSim.SetInitTimeStep(step_size);
+            DEMSim.SetMaxVelocity(10.0);
             DEMSim.UpdateSimParams();
             change_step = 2;
-        } 
+        }
+        */
         // else if (t > 3.0 && change_step == 2) {
         //     DEMSim.DoDynamicsThenSync(0);
         //     step_size = 5e-6;
@@ -618,8 +526,8 @@ int main(int argc, char* argv[]) {
             std::cout << "========================" << std::endl;
         }
     }
-    std::cout << h_total.count() << " seconds spent on host"  << std::endl;
-    std::cout << d_total.count() << " seconds spent on device"  << std::endl;
+    std::cout << h_total.count() << " seconds spent on host" << std::endl;
+    std::cout << d_total.count() << " seconds spent on device" << std::endl;
 
     DEMSim.ShowThreadCollaborationStats();
     DEMSim.ShowTimingStats();
@@ -632,7 +540,7 @@ int main(int argc, char* argv[]) {
 //------------------------------------------------------------------
 void SaveParaViewFiles(Viper& rover, path& rover_dir, unsigned int frame_number) {
     path filename;
-    
+
     char f_name[20];
     sprintf(f_name, "%04d", frame_number);
     filename = rover_dir / ("./viper_" + std::string(f_name) + ".obj");
@@ -841,5 +749,4 @@ void SaveParaViewFiles(Viper& rover, path& rover_dir, unsigned int frame_number)
     }
 
     geometry::ChTriangleMeshConnected::WriteWavefront(filename.string(), meshes);
-
 }
